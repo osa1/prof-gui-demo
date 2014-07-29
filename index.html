@@ -80,18 +80,23 @@
 
   <core-overlay id="overlay">
     <h2>Retained object counts per CCS</h2>
-    <div flex id="container"></div>
+    <div flex id="container">
+      <ul id="container-ul"></ul>
+    </div>
     <button core-overlay-toggle>Close</button>
   </core-overlay>
 </body>
 
 <script language="javascript">
-var containerDiv = document.getElementById("container");
+var ul = document.getElementById("container-ul");
 
-function addCCSDOM() {
-  for (var i = 0; i < h$ccsList.length; i++) {
-    var ccs = h$ccsList[i];
+function mkDivId(ccs) {
+  return (ccs.cc.module + '-' + ccs.cc.label).split('.').join('-');
+}
+
+function mkCCSDOM(ccs) {
     var ccsLabel = ccs.cc.module + '.' + ccs.cc.label + ' ('  + ccs.cc.srcloc + ')';
+    var rowDivId = mkDivId(ccs);
 
     var leftDiv  = document.createElement("div");
     leftDiv.setAttribute("class", "column-left");
@@ -120,13 +125,22 @@ function addCCSDOM() {
     var rowDiv = document.createElement("div");
     rowDiv.setAttribute("layout", "");
     rowDiv.setAttribute("horizontal", "");
+    rowDiv.setAttribute("id", rowDivId);
 
     rowDiv.appendChild(leftDiv);
     rowDiv.appendChild(midDiv);
     rowDiv.appendChild(rightDiv);
+    rowDiv.appendChild(document.createElement("ul"));
 
-    containerDiv.appendChild(rowDiv);
-  }
+    var row = document.createElement("li");
+    row.appendChild(rowDiv);
+
+    return row;
+}
+
+function addCCSDOM() {
+  for (var i = 0; i < h$ccsList.length; i++)
+    ul.appendChild(mkCCSDOM(h$ccsList[i]));
 }
 
 </script>
@@ -145,6 +159,42 @@ function updateDOMs() {
       h$inheritRetained(ccs);
       ccs.domElems.midDiv.innerHTML = ccs.inheritedRetain;
       ccs.domElems.bar.setAttribute("value", ccs.inheritedRetain);
+    }
+  }
+
+  var stack = [];
+  for (var ccsIdx = 0; ccsIdx < h$ccsList.length; ccsIdx++) {
+    var ccs = h$ccsList[ccsIdx];
+    if (ccs.prevStack === null || ccs.prevStack === undefined) {
+
+      // push initial values to the stack
+      for (var j = 0; j < ccs.consed.values().length; j++)
+        stack.push(ccs.consed.values()[j]);
+
+      var val = stack.pop();
+
+      while (val !== undefined) {
+        // push children stack frames to the stack
+        for (var j = 0; j < val.consed.values().length; j++)
+          stack.push(val.consed.values()[j]);
+
+        var divId = mkDivId(val);
+        var div   = document.getElementById(divId);
+
+        if (div === null) {
+          var div = mkCCSDOM(val);
+          var parentDivId = mkDivId(val.prevStack);
+          var parentDiv = document.getElementById(parentDivId);
+          var ul = parentDiv.children[parentDiv.children.length - 1];
+          ul.appendChild(mkCCSDOM(val));
+        } else {
+          val.domElems.midDiv.innerHTML = val.inheritedRetain;
+          val.domElems.bar.setAttribute("value", val.inheritedRetain);
+        }
+
+        // reload current value
+        val = stack.pop();
+      }
     }
   }
 }
