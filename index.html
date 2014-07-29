@@ -71,6 +71,15 @@
       outline: 1px solid rgba(0,0,0,0.2);
       box-shadow: 0 4px 16px rgba(0,0,0,0.2);
     }
+
+
+    ul {
+    }
+
+    li {
+      margin: 0;
+      padding: 0;
+    }
   </style>
 </head>
 
@@ -81,7 +90,7 @@
   <core-overlay id="overlay">
     <h2>Retained object counts per CCS</h2>
     <div flex id="container">
-      <ul id="container-ul"></ul>
+      <ul flex id="container-ul"></ul>
     </div>
     <button core-overlay-toggle>Close</button>
   </core-overlay>
@@ -125,17 +134,22 @@ function mkCCSDOM(ccs) {
     var rowDiv = document.createElement("div");
     rowDiv.setAttribute("layout", "");
     rowDiv.setAttribute("horizontal", "");
-    rowDiv.setAttribute("id", rowDivId);
 
     rowDiv.appendChild(leftDiv);
     rowDiv.appendChild(midDiv);
     rowDiv.appendChild(rightDiv);
-    rowDiv.appendChild(document.createElement("ul"));
 
-    var row = document.createElement("li");
-    row.appendChild(rowDiv);
+    var ul = document.createElement("ul");
 
-    return row;
+    var div = document.createElement("div");
+    div.setAttribute("layout", "");
+    div.setAttribute("vertical", "");
+    div.setAttribute("id", rowDivId);
+
+    div.appendChild(rowDiv);
+    div.appendChild(ul);
+
+    return div;
 }
 
 function addCCSDOM() {
