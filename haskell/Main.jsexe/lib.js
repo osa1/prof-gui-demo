@@ -8315,7 +8315,7 @@ function h$includePolymer() {
 function h$addCSS() {
   var style = document.createElement("style");
   var css =
-    "      #ghcjs-prof-container {        width: 1600px;        height: 80%;        overflow: scroll;        height: 300px;      }      .ghcjs-prof-column-left { width: 20%; }      .ghcjs-prof-column-center { width: 5%; }      .ghcjs-prof-column-right { width: 70%; }      .ghcjs-prof-progress {        padding: 10px;        display: block;        width: 100%;      }      .ghcjs-prof-progress.pink::shadow #activeProgress {        background-color: #e91e63;      }      .ghcjs-prof-progress.pink::shadow #secondaryProgress {        background-color: #f8bbd0;      }      #ghcjs-prof-overlay {        box-sizing: border-box;        -moz-box-sizing: border-box;        font-family: Arial, Helvetica, sans-serif;        font-size: 13px;        -webkit-user-select: none;        -moz-user-select: none;        overflow: hidden;        background: white;        padding: 30px 42px;        outline: 1px solid rgba(0,0,0,0.2);        box-shadow: 0 4px 16px rgba(0,0,0,0.2);      }    ";
+    "      #ghcjs-prof-container {        height: 80%;        overflow: scroll;        height: 300px;      }      .ghcjs-prof-column-left { width: 20%; }      .ghcjs-prof-column-center { width: 5%; }      .ghcjs-prof-column-right { width: 70%; }      .ghcjs-prof-progress {        padding: 10px;        display: block;        width: 100%;      }      .ghcjs-prof-progress.pink::shadow #activeProgress {        background-color: #e91e63;      }      .ghcjs-prof-progress.pink::shadow #secondaryProgress {        background-color: #f8bbd0;      }      #ghcjs-prof-overlay {        box-sizing: border-box;        -moz-box-sizing: border-box;        font-family: Arial, Helvetica, sans-serif;        font-size: 13px;        -webkit-user-select: none;        -moz-user-select: none;        overflow: hidden;        background: white;        padding: 30px 42px;        outline: 1px solid rgba(0,0,0,0.2);        box-shadow: 0 4px 16px rgba(0,0,0,0.2);        width: 80%;      }    ";
   if (style.styleSheet) {
     style.styleSheet.cssText = css;
   } else {
@@ -8428,9 +8428,16 @@ function h$updateDOMs() {
       }
     }
   }
-  h$sortDOMs(document.getElementById("ghcjs-prof-container-ul"));
+  var maxRetained = h$sortDOMs(document.getElementById("ghcjs-prof-container-ul"));
+  // scale the bars
+  for (var ccsIdx = 0; ccsIdx < h$ccsList.length; ccsIdx++) {
+    var ccs = h$ccsList[ccsIdx];
+    ccs.domElems.rightDiv.children[0].setAttribute("max", maxRetained);
+  }
 }
 function h$sortDOMs(parent) {
+  // maximum number of retained objs, to be used in scaling the bars
+  var maxRetained = 0;
   var items = [];
   var children = parent.children;
   while (parent.firstChild)
@@ -8443,8 +8450,13 @@ function h$sortDOMs(parent) {
     var midDivB = b.children[0].children[1];
     return (parseInt(midDivB.innerHTML) - parseInt(midDivA.innerHTML));
   });
-  for (var i = 0; i < items.length; i++)
+  for (var i = 0; i < items.length; i++) {
+    var retained = parseInt(items[i].children[0].children[1].innerHTML);
+    if (retained > maxRetained)
+      maxRetained = retained;
     parent.appendChild(items[i]);
+  }
+  return maxRetained;
 }
 function h$toggleProfGUI() {
   document.getElementById("ghcjs-prof-overlay").toggle();
