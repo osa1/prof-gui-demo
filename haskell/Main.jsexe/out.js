@@ -381,6 +381,18 @@ function h$ghczmprimZCGHCziTypesziCzh_e()
   h$r1 = h$r2;
   return h$stack[h$sp];
 };
+var h$GHCJSZCForeignzuCAFzuccs = new h$CC("CAF", "GHCJS.Foreign", "<entire-module>", true);
+var GHCJSZCForeignzuhzdGHCJSZZCForeignzzuCAFzzuccszuccs = new h$CCS(null, h$GHCJSZCForeignzuCAFzuccs);
+function h$ghcjszmbasezm0zi1zi0zi0ZCGHCJSziForeignzizdfToJSStringZMZN_e()
+{
+  h$r1 = h$ghcjszmprimZCGHCJSziPrimzitoJSString;
+  return h$ghcjszmprimZCGHCJSziPrimzitoJSString_e;
+};
+function h$ghcjszmbasezm0zi1zi0zi0ZCGHCJSziForeignzitoJSString_e()
+{
+  h$r1 = h$r2;
+  return h$ap_0_0_fast();
+};
 var h$ControlZCExceptionZCBasezuCAFzuccs = new h$CC("CAF", "Control.Exception.Base", "<entire-module>", true);
 var ControlZCExceptionZCBasezuhzdControlZZCExceptionZZCBasezzuCAFzzuccszuccs = new h$CCS(null,
 h$ControlZCExceptionZCBasezuCAFzuccs);
@@ -16686,18 +16698,6 @@ function h$baseZCSystemziPosixziInternalszifdFileSizze1_e()
   h$baseZCForeignziCziErrorzithrowErrnoIfMinus1Retry2);
   return h$baseZCForeignziCziErrorzithrowErrnoIfMinus1Retry2_e;
 };
-var h$GHCJSZCForeignzuCAFzuccs = new h$CC("CAF", "GHCJS.Foreign", "<entire-module>", true);
-var GHCJSZCForeignzuhzdGHCJSZZCForeignzzuCAFzzuccszuccs = new h$CCS(null, h$GHCJSZCForeignzuCAFzuccs);
-function h$ghcjszmbasezm0zi1zi0zi0ZCGHCJSziForeignzizdfToJSStringZMZN_e()
-{
-  h$r1 = h$ghcjszmprimZCGHCJSziPrimzitoJSString;
-  return h$ghcjszmprimZCGHCJSziPrimzitoJSString_e;
-};
-function h$ghcjszmbasezm0zi1zi0zi0ZCGHCJSziForeignzitoJSString_e()
-{
-  h$r1 = h$r2;
-  return h$ap_0_0_fast();
-};
 var h$GHCJSZCPrimzuCAFzuccs = new h$CC("CAF", "GHCJS.Prim", "<entire-module>", true);
 var GHCJSZCPrimzuhzdGHCJSZZCPrimzzuCAFzzuccszuccs = new h$CCS(null, h$GHCJSZCPrimzuCAFzuccs);
 function h$$ghcjszmprimzm0zi1zi0zi0ZCGHCJSziPrim_d()
@@ -18301,13 +18301,13 @@ function h$integerzmgmpZCGHCziIntegerziTypezimkInteger_e()
   return h$e(h$r2);
 };
 var h$MainzuCAFzuccs = new h$CC("CAF", "Main", "<entire-module>", true);
-var h$MainzuMainzufibszzinextzuC0zucc = new h$CC("fibs.next", "Main", "Main.hs:12:5-43", false);
-var h$MainzuMainzufibszuC1zucc = new h$CC("fibs", "Main", "Main.hs:(10,1)-(12,43)", false);
-var h$MainzuMainzuloopzuC2zucc = new h$CC("loop", "Main", "Main.hs:(23,1)-(28,16)", false);
-var h$MainzuMainzumainzuC3zucc = new h$CC("main", "Main", "Main.hs:31:1-13", false);
+var h$MainzuMainzufibszzinextzuC0zucc = new h$CC("fibs.next", "Main", "Main.hs:15:5-43", false);
+var h$MainzuMainzufibszuC1zucc = new h$CC("fibs", "Main", "Main.hs:(13,1)-(15,43)", false);
+var h$MainzuMainzuloopzuC2zucc = new h$CC("loop", "Main", "Main.hs:(26,1)-(30,16)", false);
+var h$MainzuMainzumainzuC3zucc = new h$CC("main", "Main", "Main.hs:(33,1)-(35,10)", false);
 var MainzuhzdMainzzuCAFzzuccszuccs = new h$CCS(null, h$MainzuCAFzuccs);
-var h$$mainZCMain_c = h$str("Main.hs:12:5-43|function next");
-function h$$mainZCMainzifail_e_gJcgF1()
+var h$$mainZCMain_c = h$str("Main.hs:15:5-43|function next");
+function h$$mainZCMainzifail_e_YJcgGo()
 {
   h$enterFunCCS(h$currentThread.ccs, h$r1.cc);
   h$r3 = 0;
@@ -18315,7 +18315,7 @@ function h$$mainZCMainzifail_e_gJcgF1()
   h$r1 = h$baseZCControlziExceptionziBasezipatError;
   return h$baseZCControlziExceptionziBasezipatError_e;
 };
-function h$$mainZCMainzisat_e_hJcgFa()
+function h$$mainZCMainzisat_e_YJcgGx()
 {
   var a = h$r1.d1;
   var b = h$r1.d2;
@@ -18324,7 +18324,7 @@ function h$$mainZCMainzisat_e_hJcgFa()
   h$l2(b, a);
   return h$ap_1_1_fast();
 };
-function h$$mainZCMainzisat_e_gJcgF9()
+function h$$mainZCMainzisat_e_YJcgGw()
 {
   var a = h$r1.d1;
   var b = h$r1.d2;
@@ -18352,8 +18352,8 @@ function h$$mainZCMain_e()
   }
   else
   {
-    h$r1 = h$c2(h$ghczmprimZCGHCziTypesziZC_con_e, h$c3(h$$mainZCMainzisat_e_gJcgF9, a, d, h$r1.d1, h$currentThread.ccs),
-    h$c2(h$$mainZCMainzisat_e_hJcgFa, b, h$r1, h$currentThread.ccs), h$currentThread.ccs);
+    h$r1 = h$c2(h$ghczmprimZCGHCziTypesziZC_con_e, h$c3(h$$mainZCMainzisat_e_YJcgGw, a, d, h$r1.d1, h$currentThread.ccs),
+    h$c2(h$$mainZCMainzisat_e_YJcgGx, b, h$r1, h$currentThread.ccs), h$currentThread.ccs);
   };
   return h$stack[h$sp];
 };
@@ -18378,7 +18378,7 @@ function h$$mainZCMain_d()
     return h$e(h$r1.d2);
   };
 };
-function h$$mainZCMainzinext1_e_gJcgFZ()
+function h$$mainZCMainzinext1_e_YJcgGm()
 {
   var a = h$r1.d1;
   var b = h$r1.d2;
@@ -18387,38 +18387,38 @@ function h$$mainZCMainzinext1_e_gJcgFZ()
   h$currentThread.ccs = h$pushCostCentre(h$currentThread.ccs, h$MainzuMainzufibszzinextzuC0zucc);
   ++h$sp;
   h$stack[h$sp] = h$currentThread.ccs;
-  h$p4(a, b, h$c(h$$mainZCMainzifail_e_gJcgF1, h$currentThread.ccs), h$$mainZCMain_d);
+  h$p4(a, b, h$c(h$$mainZCMainzifail_e_YJcgGo, h$currentThread.ccs), h$$mainZCMain_d);
   return h$e(c);
 };
-function h$$mainZCMainzinext_e_gJcgFW()
+function h$$mainZCMainzinext_e_YJcgGj()
 {
   h$enterFunCCS(h$currentThread.ccs, h$r1.cc);
-  var a = h$c(h$$mainZCMainzinext1_e_gJcgFZ, h$currentThread.ccs);
+  var a = h$c(h$$mainZCMainzinext1_e_YJcgGm, h$currentThread.ccs);
   a.d1 = h$r2;
   a.d2 = a;
   h$l2(h$r3, a);
   return h$ap_1_1_fast();
 };
-function h$$mainZCMainzisat_e_hJcgFd()
+function h$$mainZCMainzisat_e_YJcgGA()
 {
   var a = h$r1.d1;
   h$bh();
   h$enterThunkCCS(h$r1.cc);
-  h$l3(h$$mainZCMainzifibs_aBcfgy, h$baseZCGHCziNumzizdfNumInteger, a);
+  h$l3(h$$mainZCMainzifibs_RBcfh5, h$baseZCGHCziNumzizdfNumInteger, a);
   return h$ap_2_2_fast();
 };
-function h$$mainZCMainzifibs_e_aBcfgy()
+function h$$mainZCMainzifibs_e_RBcfh5()
 {
   h$bh();
   h$enterThunkCCS(h$r1.cc);
   h$currentThread.ccs = h$pushCostCentre(h$currentThread.ccs, h$MainzuMainzufibszuC1zucc);
   h$r1 = h$c2(h$ghczmprimZCGHCziTypesziZC_con_e, h$c1(h$integerzmgmpZCGHCziIntegerziTypeziSzh_con_e, 0,
   h$currentThread.ccs), h$c2(h$ghczmprimZCGHCziTypesziZC_con_e, h$c1(h$integerzmgmpZCGHCziIntegerziTypeziSzh_con_e, 1,
-  h$currentThread.ccs), h$c1(h$$mainZCMainzisat_e_hJcgFd, h$c(h$$mainZCMainzinext_e_gJcgFW, h$currentThread.ccs),
+  h$currentThread.ccs), h$c1(h$$mainZCMainzisat_e_YJcgGA, h$c(h$$mainZCMainzinext_e_YJcgGj, h$currentThread.ccs),
   h$currentThread.ccs), h$currentThread.ccs), h$currentThread.ccs);
   return h$stack[h$sp];
 };
-function h$$mainZCMainzisat_e_hJcgFo()
+function h$$mainZCMainzisat_e_YJcgGL()
 {
   var a = h$r1.d1;
   h$bh();
@@ -18427,65 +18427,56 @@ function h$$mainZCMainzisat_e_hJcgFo()
   h$l2(h$baseZCGHCziNumzizdfNumInt, h$baseZCGHCziNumzizp);
   return h$baseZCGHCziNumzizp_e;
 };
-function h$$mainZCMainzisat_e_hJcgFp()
+function h$$mainZCMainzisat_e_YJcgGM()
 {
   var a = h$r1.d1;
   h$bh();
   h$enterThunkCCS(h$r1.cc);
-  h$l2(h$c1(h$$mainZCMainzisat_e_hJcgFo, a, h$currentThread.ccs), h$$mainZCMainziloop_aBcfgz);
-  return h$$mainZCMainziloop_e_aBcfgz;
+  h$l2(h$c1(h$$mainZCMainzisat_e_YJcgGL, a, h$currentThread.ccs), h$$mainZCMainziloop_RBcfh6);
+  return h$$mainZCMainziloop_e_RBcfh6;
 };
-function h$$mainZCMainzisat_e_hJcgFm()
+function h$$mainZCMainzisat_e_YJcgGJ()
 {
   h$bh();
   h$enterThunkCCS(h$r1.cc);
   h$l2(500000, h$baseZCGHCziConcziIOzithreadDelay);
   return h$ap_1_1_fast();
 };
-function h$$mainZCMainzisat_e_hJcgFq()
+function h$$mainZCMainzisat_e_YJcgGN()
 {
   var a = h$r1.d1;
   h$bh();
   h$enterThunkCCS(h$r1.cc);
-  h$p3(h$c1(h$$mainZCMainzisat_e_hJcgFp, a, h$currentThread.ccs), h$c(h$$mainZCMainzisat_e_hJcgFm, h$currentThread.ccs),
+  h$p3(h$c1(h$$mainZCMainzisat_e_YJcgGM, a, h$currentThread.ccs), h$c(h$$mainZCMainzisat_e_YJcgGJ, h$currentThread.ccs),
   h$ap_2_2);
   h$l2(h$baseZCGHCziBasezizdfMonadIO, h$baseZCGHCziBasezizgzg);
   return h$baseZCGHCziBasezizgzg_e;
 };
-function h$$mainZCMainzisat_e_hJcgFr()
+function h$$mainZCMainzisat_e_YJcgGO()
 {
   var a = h$r1.d1;
   h$bh();
   h$enterThunkCCS(h$r1.cc);
-  h$p3(h$c1(h$$mainZCMainzisat_e_hJcgFq, a, h$currentThread.ccs), h$$mainZCMainziupdateDOMs_9Bcffw, h$ap_2_2);
+  h$p3(h$c1(h$$mainZCMainzisat_e_YJcgGN, a, h$currentThread.ccs), h$baseZCSystemziMemziperformGC, h$ap_2_2);
   h$l2(h$baseZCGHCziBasezizdfMonadIO, h$baseZCGHCziBasezizgzg);
   return h$baseZCGHCziBasezizgzg_e;
 };
-function h$$mainZCMainzisat_e_hJcgFs()
+function h$$mainZCMainzisat_e_YJcgGG()
 {
   var a = h$r1.d1;
   h$bh();
   h$enterThunkCCS(h$r1.cc);
-  h$p3(h$c1(h$$mainZCMainzisat_e_hJcgFr, a, h$currentThread.ccs), h$baseZCSystemziMemziperformGC, h$ap_2_2);
-  h$l2(h$baseZCGHCziBasezizdfMonadIO, h$baseZCGHCziBasezizgzg);
-  return h$baseZCGHCziBasezizgzg_e;
-};
-function h$$mainZCMainzisat_e_hJcgFj()
-{
-  var a = h$r1.d1;
-  h$bh();
-  h$enterThunkCCS(h$r1.cc);
-  h$l3(a, h$$mainZCMainzifibs_aBcfgy, h$baseZCGHCziListziznzn);
+  h$l3(a, h$$mainZCMainzifibs_RBcfh5, h$baseZCGHCziListziznzn);
   return h$ap_2_2_fast();
 };
-function h$$mainZCMainzisat_e_hJcgFh()
+function h$$mainZCMainzisat_e_YJcgGE()
 {
   h$bh();
   h$enterThunkCCS(h$r1.cc);
   h$l2(h$baseZCGHCziShowzizdfShowInteger, h$baseZCGHCziShowzishow);
   return h$baseZCGHCziShowzishow_e;
 };
-function h$$mainZCMainzisat_e_hJcgFg()
+function h$$mainZCMainzisat_e_YJcgGD()
 {
   h$bh();
   h$enterThunkCCS(h$r1.cc);
@@ -18493,37 +18484,42 @@ function h$$mainZCMainzisat_e_hJcgFg()
   h$ghcjszmbasezm0zi1zi0zi0ZCGHCJSziForeignzitoJSString);
   return h$ghcjszmbasezm0zi1zi0zi0ZCGHCJSziForeignzitoJSString_e;
 };
-function h$$mainZCMainzisat_e_hJcgFi()
+function h$$mainZCMainzisat_e_YJcgGF()
 {
   h$bh();
   h$enterThunkCCS(h$r1.cc);
-  h$l3(h$c(h$$mainZCMainzisat_e_hJcgFh, h$currentThread.ccs), h$c(h$$mainZCMainzisat_e_hJcgFg, h$currentThread.ccs),
+  h$l3(h$c(h$$mainZCMainzisat_e_YJcgGE, h$currentThread.ccs), h$c(h$$mainZCMainzisat_e_YJcgGD, h$currentThread.ccs),
   h$baseZCGHCziBasezizi);
   return h$ap_2_2_fast();
 };
-function h$$mainZCMainzisat_e_hJcgFk()
+function h$$mainZCMainzisat_e_YJcgGH()
 {
   var a = h$r1.d1;
   h$bh();
   h$enterThunkCCS(h$r1.cc);
-  h$l4(h$c1(h$$mainZCMainzisat_e_hJcgFj, a, h$currentThread.ccs), h$c(h$$mainZCMainzisat_e_hJcgFi, h$currentThread.ccs),
-  h$$mainZCMainziputString_aBcfgx, h$baseZCGHCziBasezizi);
+  h$l4(h$c1(h$$mainZCMainzisat_e_YJcgGG, a, h$currentThread.ccs), h$c(h$$mainZCMainzisat_e_YJcgGF, h$currentThread.ccs),
+  h$$mainZCMainziputString_RBcfh4, h$baseZCGHCziBasezizi);
   return h$ap_3_3_fast();
 };
-function h$$mainZCMainziloop_e_aBcfgz()
+function h$$mainZCMainziloop_e_RBcfh6()
 {
   var a = h$r2;
   h$currentThread.ccs = h$pushCostCentre(h$currentThread.ccs, h$MainzuMainzuloopzuC2zucc);
-  h$p3(h$c1(h$$mainZCMainzisat_e_hJcgFs, a, h$currentThread.ccs), h$c1(h$$mainZCMainzisat_e_hJcgFk, a,
+  h$p3(h$c1(h$$mainZCMainzisat_e_YJcgGO, a, h$currentThread.ccs), h$c1(h$$mainZCMainzisat_e_YJcgGH, a,
   h$currentThread.ccs), h$ap_2_2);
   h$l2(h$baseZCGHCziBasezizdfMonadIO, h$baseZCGHCziBasezizgzg);
   return h$baseZCGHCziBasezizgzg_e;
 };
-function h$$mainZCMainzia1_e_KBcfgu()
+function h$$mainZCMainzia1_e_rBcfiR()
 {
-  var a = h$currentThread.ccs;
-  updateDOMs();
-  h$currentThread.ccs = a;
+  var b = h$currentThread.ccs;
+  (function()
+   {
+     var a = document.createElement("div");
+     a.setAttribute("id", "box2");
+     document.getElementsByTagName("body")[0].appendChild(a);
+   })();
+  h$currentThread.ccs = b;
   h$r1 = h$ghczmprimZCGHCziTupleziZLZR;
   return h$stack[h$sp];
 };
@@ -18538,30 +18534,38 @@ function h$$mainZCMain_i()
   h$r1 = h$ghczmprimZCGHCziTupleziZLZR;
   return h$stack[h$sp];
 };
-function h$$mainZCMainzia_e_JBcfgg()
+function h$$mainZCMainzia_e_qBcfiD()
 {
   ++h$sp;
   h$stack[h$sp] = h$currentThread.ccs;
   h$p1(h$$mainZCMain_i);
   return h$e(h$r2);
 };
-function h$$mainZCMainziputString_e_aBcfgx()
+function h$$mainZCMainziputString_e_RBcfh4()
 {
-  h$r1 = h$$mainZCMainzia_JBcfgg;
-  return h$$mainZCMainzia_e_JBcfgg;
+  h$r1 = h$$mainZCMainzia_qBcfiD;
+  return h$$mainZCMainzia_e_qBcfiD;
 };
-function h$$mainZCMainziupdateDOMs_e_9Bcffw()
+function h$$mainZCMainzicreateBox_e_QBcfh3()
 {
-  h$r1 = h$$mainZCMainzia1_KBcfgu;
-  return h$$mainZCMainzia1_e_KBcfgu;
+  h$r1 = h$$mainZCMainzia1_rBcfiR;
+  return h$$mainZCMainzia1_e_rBcfiR;
+};
+function h$$mainZCMainzisat_e_YJcgGQ()
+{
+  h$bh();
+  h$enterThunkCCS(h$r1.cc);
+  h$l2(0, h$$mainZCMainziloop_RBcfh6);
+  return h$$mainZCMainziloop_e_RBcfh6;
 };
 function h$mainZCMainzimain_e()
 {
   h$bh();
   h$enterThunkCCS(h$r1.cc);
   h$currentThread.ccs = h$pushCostCentre(h$currentThread.ccs, h$MainzuMainzumainzuC3zucc);
-  h$l2(0, h$$mainZCMainziloop_aBcfgz);
-  return h$$mainZCMainziloop_e_aBcfgz;
+  h$p3(h$c(h$$mainZCMainzisat_e_YJcgGQ, h$currentThread.ccs), h$$mainZCMainzicreateBox_QBcfh3, h$ap_2_2);
+  h$l2(h$baseZCGHCziBasezizdfMonadIO, h$baseZCGHCziBasezizgzg);
+  return h$baseZCGHCziBasezizgzg_e;
 };
 function h$mainZCZCMainzimain_e()
 {
@@ -18584,6 +18588,8 @@ var h$ghczmprimZCGHCziTypesziIzh = h$d();
 var h$ghczmprimZCGHCziTypesziFalse = h$p(false);
 var h$ghczmprimZCGHCziTypesziZC = h$d();
 var h$ghczmprimZCGHCziTypesziCzh = h$d();
+var h$ghcjszmbasezm0zi1zi0zi0ZCGHCJSziForeignzizdfToJSStringZMZN = h$d();
+var h$ghcjszmbasezm0zi1zi0zi0ZCGHCJSziForeignzitoJSString = h$d();
 var h$baseZCControlziExceptionziBasezizdfExceptionNonTerminationzuzdctoException = h$d();
 var h$baseZCControlziExceptionziBasezizdfExceptionNonTermination = h$d();
 var h$baseZCControlziExceptionziBasezizdfExceptionPatternMatchFailzuzdctoException = h$d();
@@ -19129,8 +19135,6 @@ h$di(h$baseZCSystemziPosixziInternalszifdFileSizzezuloc);
 var h$baseZCSystemziPosixziInternalszifdFileSizze2 = h$d();
 var h$baseZCSystemziPosixziInternalszifdFileSizze1 = h$d();
 var h$baseZCSystemziPosixziInternalsziioezuunknownfiletype = h$d();
-var h$ghcjszmbasezm0zi1zi0zi0ZCGHCJSziForeignzizdfToJSStringZMZN = h$d();
-var h$ghcjszmbasezm0zi1zi0zi0ZCGHCJSziForeignzitoJSString = h$d();
 var h$ghcjszmprimZCGHCJSziPrimzigetProp1 = h$d();
 var h$ghcjszmprimZCGHCJSziPrimzizdfExceptionWouldBlockExceptionzuzdctoException = h$d();
 var h$ghcjszmprimZCGHCJSziPrimzizdfExceptionWouldBlockException = h$d();
@@ -19194,12 +19198,12 @@ var h$integerzmgmpZCGHCziIntegerziTypeziintegerToInt64 = h$d();
 var h$integerzmgmpZCGHCziIntegerziTypeziintegerToInt = h$d();
 var h$integerzmgmpZCGHCziIntegerziTypezismallInteger = h$d();
 var h$integerzmgmpZCGHCziIntegerziTypezimkInteger = h$d();
-var h$$mainZCMainzifibs_aBcfgy = h$d();
-var h$$mainZCMainziloop_aBcfgz = h$d();
-var h$$mainZCMainzia1_KBcfgu = h$d();
-var h$$mainZCMainzia_JBcfgg = h$d();
-var h$$mainZCMainziputString_aBcfgx = h$d();
-var h$$mainZCMainziupdateDOMs_9Bcffw = h$d();
+var h$$mainZCMainzifibs_RBcfh5 = h$d();
+var h$$mainZCMainziloop_RBcfh6 = h$d();
+var h$$mainZCMainzia1_rBcfiR = h$d();
+var h$$mainZCMainzia_qBcfiD = h$d();
+var h$$mainZCMainziputString_RBcfh4 = h$d();
+var h$$mainZCMainzicreateBox_QBcfh3 = h$d();
 var h$mainZCMainzimain = h$d();
 var h$mainZCZCMainzimain = h$d();
 h$sti(h$ghczmprimZCGHCziCStringziunpackAppendCStringzh, h$ghczmprimZCGHCziCStringziunpackAppendCStringzh_e, [],
@@ -19217,6 +19221,10 @@ h$sti(h$ghczmprimZCGHCziTypesziZMZN, h$ghczmprimZCGHCziTypesziZMZN_con_e, [], h$
 h$sti(h$ghczmprimZCGHCziTypesziIzh, h$ghczmprimZCGHCziTypesziIzh_e, [], h$CCS_DONT_CARE);
 h$sti(h$ghczmprimZCGHCziTypesziZC, h$ghczmprimZCGHCziTypesziZC_e, [], h$CCS_DONT_CARE);
 h$sti(h$ghczmprimZCGHCziTypesziCzh, h$ghczmprimZCGHCziTypesziCzh_e, [], h$CCS_DONT_CARE);
+h$sti(h$ghcjszmbasezm0zi1zi0zi0ZCGHCJSziForeignzizdfToJSStringZMZN,
+h$ghcjszmbasezm0zi1zi0zi0ZCGHCJSziForeignzizdfToJSStringZMZN_e, [], h$CCS_DONT_CARE);
+h$sti(h$ghcjszmbasezm0zi1zi0zi0ZCGHCJSziForeignzitoJSString, h$ghcjszmbasezm0zi1zi0zi0ZCGHCJSziForeignzitoJSString_e,
+[], h$CCS_DONT_CARE);
 h$sti(h$baseZCControlziExceptionziBasezizdfExceptionNonTerminationzuzdctoException,
 h$baseZCControlziExceptionziBasezizdfExceptionNonTerminationzuzdctoException_e, [], h$CCS_DONT_CARE);
 h$sti(h$baseZCControlziExceptionziBasezizdfExceptionNonTermination, h$baseZCGHCziExceptionziDZCException_con_e,
@@ -19836,10 +19844,6 @@ h$sti(h$baseZCSystemziPosixziInternalsziioezuunknownfiletype, h$baseZCGHCziIOziE
 [h$baseZCDataziMaybeziNothing, h$baseZCGHCziIOziExceptionziUnsupportedOperation,
 h$baseZCSystemziPosixziInternalsziioezuunknownfiletype2, h$baseZCSystemziPosixziInternalsziioezuunknownfiletype1,
 h$baseZCDataziMaybeziNothing, h$baseZCDataziMaybeziNothing], h$CCS_DONT_CARE);
-h$sti(h$ghcjszmbasezm0zi1zi0zi0ZCGHCJSziForeignzizdfToJSStringZMZN,
-h$ghcjszmbasezm0zi1zi0zi0ZCGHCJSziForeignzizdfToJSStringZMZN_e, [], h$CCS_DONT_CARE);
-h$sti(h$ghcjszmbasezm0zi1zi0zi0ZCGHCJSziForeignzitoJSString, h$ghcjszmbasezm0zi1zi0zi0ZCGHCJSziForeignzitoJSString_e,
-[], h$CCS_DONT_CARE);
 h$sti(h$ghcjszmprimZCGHCJSziPrimzigetProp1, h$ghcjszmprimZCGHCJSziPrimzigetProp1_e, [], h$CCS_DONT_CARE);
 h$sti(h$ghcjszmprimZCGHCJSziPrimzizdfExceptionWouldBlockExceptionzuzdctoException,
 h$ghcjszmprimZCGHCJSziPrimzizdfExceptionWouldBlockExceptionzuzdctoException_e, [], h$CCS_DONT_CARE);
@@ -19964,12 +19968,12 @@ h$sti(h$integerzmgmpZCGHCziIntegerziTypezismallInteger, h$integerzmgmpZCGHCziInt
 h$CCS_DONT_CARE);
 h$sti(h$integerzmgmpZCGHCziIntegerziTypezimkInteger, h$integerzmgmpZCGHCziIntegerziTypezimkInteger_e, [],
 h$CCS_DONT_CARE);
-h$stc(h$$mainZCMainzifibs_aBcfgy, h$$mainZCMainzifibs_e_aBcfgy, MainzuhzdMainzzuCAFzzuccszuccs);
-h$sti(h$$mainZCMainziloop_aBcfgz, h$$mainZCMainziloop_e_aBcfgz, [], h$CCS_DONT_CARE);
-h$sti(h$$mainZCMainzia1_KBcfgu, h$$mainZCMainzia1_e_KBcfgu, [], h$CCS_DONT_CARE);
-h$sti(h$$mainZCMainzia_JBcfgg, h$$mainZCMainzia_e_JBcfgg, [], h$CCS_DONT_CARE);
-h$sti(h$$mainZCMainziputString_aBcfgx, h$$mainZCMainziputString_e_aBcfgx, [], h$CCS_DONT_CARE);
-h$sti(h$$mainZCMainziupdateDOMs_9Bcffw, h$$mainZCMainziupdateDOMs_e_9Bcffw, [], h$CCS_DONT_CARE);
+h$stc(h$$mainZCMainzifibs_RBcfh5, h$$mainZCMainzifibs_e_RBcfh5, MainzuhzdMainzzuCAFzzuccszuccs);
+h$sti(h$$mainZCMainziloop_RBcfh6, h$$mainZCMainziloop_e_RBcfh6, [], h$CCS_DONT_CARE);
+h$sti(h$$mainZCMainzia1_rBcfiR, h$$mainZCMainzia1_e_rBcfiR, [], h$CCS_DONT_CARE);
+h$sti(h$$mainZCMainzia_qBcfiD, h$$mainZCMainzia_e_qBcfiD, [], h$CCS_DONT_CARE);
+h$sti(h$$mainZCMainziputString_RBcfh4, h$$mainZCMainziputString_e_RBcfh4, [], h$CCS_DONT_CARE);
+h$sti(h$$mainZCMainzicreateBox_QBcfh3, h$$mainZCMainzicreateBox_e_QBcfh3, [], h$CCS_DONT_CARE);
 h$stc(h$mainZCMainzimain, h$mainZCMainzimain_e, MainzuhzdMainzzuCAFzzuccszuccs);
 h$stc(h$mainZCZCMainzimain, h$mainZCZCMainzimain_e, MainzuhzdMainzzuCAFzzuccszuccs);
 h$setObjInfo(h$ghczmprimZCGHCziCStringziunpackAppendCStringzh_e, 1, "h$ghczmprimZCGHCziCStringziunpackAppendCStringzh",
@@ -20029,6 +20033,10 @@ h$setObjInfo(h$ghczmprimZCGHCziTypesziZC_e, 1, "h$ghczmprimZCGHCziTypesziZC", []
 h$setObjInfo(h$ghczmprimZCGHCziTypesziZC_con_e, 2, "ghc-prim:GHC.Types.:", [0, 0], 2, 2, 256, null);
 h$setObjInfo(h$ghczmprimZCGHCziTypesziCzh_e, 1, "h$ghczmprimZCGHCziTypesziCzh", [], 257, 0, 257, null);
 h$setObjInfo(h$ghczmprimZCGHCziTypesziCzh_con_e, 2, "ghc-prim:GHC.Types.C#", [3], 1, 1, 256, null);
+h$setObjInfo(h$ghcjszmbasezm0zi1zi0zi0ZCGHCJSziForeignzizdfToJSStringZMZN_e, 1,
+"h$ghcjszmbasezm0zi1zi0zi0ZCGHCJSziForeignzizdfToJSStringZMZN", [], 257, 0, 257, null);
+h$setObjInfo(h$ghcjszmbasezm0zi1zi0zi0ZCGHCJSziForeignzitoJSString_e, 1,
+"h$ghcjszmbasezm0zi1zi0zi0ZCGHCJSziForeignzitoJSString", [], 257, 0, 257, null);
 h$setObjInfo(h$baseZCControlziExceptionziBasezizdfExceptionNonTerminationzuzdctoException_e, 1,
 "h$baseZCControlziExceptionziBasezizdfExceptionNonTerminationzuzdctoException", [], 257, 0, 257,
 [h$baseZCControlziExceptionziBasezizdfExceptionNonTermination]);
@@ -22178,10 +22186,6 @@ h$setObjInfo(h$$baseZCSystemziPosixziInternalszisat_e_zMcgil, 1,
 h$setObjInfo(h$$baseZCSystemziPosixziInternals_kt, (-1), "h$$baseZCSystemziPosixziInternals_kt", [2, 2, 7], 0, 3, 256,
 null);
 h$setObjInfo(h$$baseZCSystemziPosixziInternals_ku, (-1), "h$$baseZCSystemziPosixziInternals_ku", [7], 0, 1, 256, null);
-h$setObjInfo(h$ghcjszmbasezm0zi1zi0zi0ZCGHCJSziForeignzizdfToJSStringZMZN_e, 1,
-"h$ghcjszmbasezm0zi1zi0zi0ZCGHCJSziForeignzizdfToJSStringZMZN", [], 257, 0, 257, null);
-h$setObjInfo(h$ghcjszmbasezm0zi1zi0zi0ZCGHCJSziForeignzitoJSString_e, 1,
-"h$ghcjszmbasezm0zi1zi0zi0ZCGHCJSziForeignzitoJSString", [], 257, 0, 257, null);
 h$setObjInfo(h$ghcjszmprimZCGHCJSziPrimzigetProp1_e, 1, "h$ghcjszmprimZCGHCJSziPrimzigetProp1", [], 257, 0, 257, null);
 h$setObjInfo(h$$ghcjszmprimzm0zi1zi0zi0ZCGHCJSziPrim_c, (-1), "h$$ghcjszmprimzm0zi1zi0zi0ZCGHCJSziPrim_c", [7], 0, 1,
 256, null);
@@ -22423,62 +22427,62 @@ h$setObjInfo(h$$integerzmgmpZCGHCziIntegerziType_gV, (-1), "h$$integerzmgmpZCGHC
 [h$integerzmgmpZCGHCziIntegerziTypezinegateInteger]);
 h$setObjInfo(h$$integerzmgmpZCGHCziIntegerziType_gW, (-1), "h$$integerzmgmpZCGHCziIntegerziType_gW", [7], 0, 1, 256,
 [h$integerzmgmpZCGHCziIntegerziTypezinegateInteger]);
-h$setObjInfo(h$$mainZCMainzifibs_e_aBcfgy, 0, "h$$mainZCMainzifibs_aBcfgy", [], 0, 0, 256,
-[h$baseZCControlziExceptionziBasezipatError, h$baseZCGHCziNumzizdfNumInteger, h$$mainZCMainzifibs_aBcfgy]);
-h$setObjInfo(h$$mainZCMainzisat_e_hJcgFd, 0, "h$$mainZCMainzisat_e_hJcgFd ,(sat[hJcgFd] :: [GHC.Integer.Type.Integer])",
-[0], 0, 1, 256, [h$baseZCGHCziNumzizdfNumInteger, h$$mainZCMainzifibs_aBcfgy]);
-h$setObjInfo(h$$mainZCMainzinext_e_gJcgFW, 1,
-"h$$mainZCMainzinext_e_gJcgFW ,(next[gJcgFW] :: forall a2. GHC.Num.Num a2 => [a2] -> [a2])", [], 514, 0, 768,
+h$setObjInfo(h$$mainZCMainzifibs_e_RBcfh5, 0, "h$$mainZCMainzifibs_RBcfh5", [], 0, 0, 256,
+[h$baseZCControlziExceptionziBasezipatError, h$baseZCGHCziNumzizdfNumInteger, h$$mainZCMainzifibs_RBcfh5]);
+h$setObjInfo(h$$mainZCMainzisat_e_YJcgGA, 0, "h$$mainZCMainzisat_e_YJcgGA, (sat[YJcgGA] :: [GHC.Integer.Type.Integer])",
+[0], 0, 1, 256, [h$baseZCGHCziNumzizdfNumInteger, h$$mainZCMainzifibs_RBcfh5]);
+h$setObjInfo(h$$mainZCMainzinext_e_YJcgGj, 1,
+"h$$mainZCMainzinext_e_YJcgGj, (next[YJcgGj] :: forall a2. GHC.Num.Num a2 => [a2] -> [a2])", [], 514, 0, 768,
 [h$baseZCControlziExceptionziBasezipatError]);
-h$setObjInfo(h$$mainZCMainzinext1_e_gJcgFZ, 1, "h$$mainZCMainzinext1_e_gJcgFZ ,(next1[gJcgFZ] :: [a2] -> [a2])", [0, 0],
+h$setObjInfo(h$$mainZCMainzinext1_e_YJcgGm, 1, "h$$mainZCMainzinext1_e_YJcgGm, (next1[YJcgGm] :: [a2] -> [a2])", [0, 0],
 257, 2, 512, [h$baseZCControlziExceptionziBasezipatError]);
 h$setObjInfo(h$$mainZCMain_d, (-1), "h$$mainZCMain_d", [0, 0, 0, 7], 0, 4, 256, null);
 h$setObjInfo(h$$mainZCMain_e, (-1), "h$$mainZCMain_e", [0, 0, 0, 0, 7], 0, 5, 256, null);
-h$setObjInfo(h$$mainZCMainzisat_e_gJcgF9, 0, "h$$mainZCMainzisat_e_gJcgF9 ,(sat[gJcgF9] :: a2)", [0, 0, 0], 0, 3, 256,
+h$setObjInfo(h$$mainZCMainzisat_e_YJcgGw, 0, "h$$mainZCMainzisat_e_YJcgGw, (sat[YJcgGw] :: a2)", [0, 0, 0], 0, 3, 256,
 null);
-h$setObjInfo(h$$mainZCMainzisat_e_hJcgFa, 0, "h$$mainZCMainzisat_e_hJcgFa ,(sat[hJcgFa] :: [a2])", [0, 0], 0, 2, 256,
+h$setObjInfo(h$$mainZCMainzisat_e_YJcgGx, 0, "h$$mainZCMainzisat_e_YJcgGx, (sat[YJcgGx] :: [a2])", [0, 0], 0, 2, 256,
 null);
-h$setObjInfo(h$$mainZCMainzifail_e_gJcgF1, 1, "h$$mainZCMainzifail_e_gJcgF1 ,(fail[gJcgF1] :: GHC.Prim.Void# -> [a2])",
+h$setObjInfo(h$$mainZCMainzifail_e_YJcgGo, 1, "h$$mainZCMainzifail_e_YJcgGo, (fail[YJcgGo] :: GHC.Prim.Void# -> [a2])",
 [], 1, 0, 256, [h$baseZCControlziExceptionziBasezipatError]);
-h$setObjInfo(h$$mainZCMainziloop_e_aBcfgz, 1, "h$$mainZCMainziloop_aBcfgz", [], 257, 0, 257, [h$baseZCGHCziListziznzn,
+h$setObjInfo(h$$mainZCMainziloop_e_RBcfh6, 1, "h$$mainZCMainziloop_RBcfh6", [], 257, 0, 257, [h$baseZCGHCziListziznzn,
 h$baseZCGHCziBasezizi, h$baseZCGHCziConcziIOzithreadDelay, h$ghcjszmbasezm0zi1zi0zi0ZCGHCJSziForeignzizdfToJSStringZMZN,
-h$baseZCGHCziBasezizdfMonadIO, h$baseZCSystemziMemziperformGC, h$baseZCGHCziNumzizdfNumInt, h$$mainZCMainzifibs_aBcfgy,
-h$$mainZCMainziloop_aBcfgz, h$baseZCGHCziShowzizdfShowInteger]);
-h$setObjInfo(h$$mainZCMainzisat_e_hJcgFk, 0, "h$$mainZCMainzisat_e_hJcgFk ,(sat[hJcgFk] :: GHC.Types.IO ())", [0], 0, 1,
+h$baseZCGHCziBasezizdfMonadIO, h$baseZCSystemziMemziperformGC, h$baseZCGHCziNumzizdfNumInt, h$$mainZCMainzifibs_RBcfh5,
+h$$mainZCMainziloop_RBcfh6, h$baseZCGHCziShowzizdfShowInteger]);
+h$setObjInfo(h$$mainZCMainzisat_e_YJcgGH, 0, "h$$mainZCMainzisat_e_YJcgGH, (sat[YJcgGH] :: GHC.Types.IO ())", [0], 0, 1,
 256, [h$baseZCGHCziListziznzn, h$baseZCGHCziBasezizi, h$ghcjszmbasezm0zi1zi0zi0ZCGHCJSziForeignzizdfToJSStringZMZN,
-h$$mainZCMainzifibs_aBcfgy, h$baseZCGHCziShowzizdfShowInteger]);
-h$setObjInfo(h$$mainZCMainzisat_e_hJcgFi, 0,
-"h$$mainZCMainzisat_e_hJcgFi ,(sat[hJcgFi] :: GHC.Integer.Type.Integer -> GHCJS.Types.JSString)", [], 0, 0, 256,
+h$$mainZCMainzifibs_RBcfh5, h$baseZCGHCziShowzizdfShowInteger]);
+h$setObjInfo(h$$mainZCMainzisat_e_YJcgGF, 0,
+"h$$mainZCMainzisat_e_YJcgGF, (sat[YJcgGF] :: GHC.Integer.Type.Integer -> GHCJS.Types.JSString)", [], 0, 0, 256,
 [h$baseZCGHCziBasezizi, h$ghcjszmbasezm0zi1zi0zi0ZCGHCJSziForeignzizdfToJSStringZMZN,
 h$baseZCGHCziShowzizdfShowInteger]);
-h$setObjInfo(h$$mainZCMainzisat_e_hJcgFg, 0,
-"h$$mainZCMainzisat_e_hJcgFg ,(sat[hJcgFg] :: GHC.Base.String -> GHCJS.Types.JSString)", [], 0, 0, 256,
+h$setObjInfo(h$$mainZCMainzisat_e_YJcgGD, 0,
+"h$$mainZCMainzisat_e_YJcgGD, (sat[YJcgGD] :: GHC.Base.String -> GHCJS.Types.JSString)", [], 0, 0, 256,
 [h$ghcjszmbasezm0zi1zi0zi0ZCGHCJSziForeignzizdfToJSStringZMZN]);
-h$setObjInfo(h$$mainZCMainzisat_e_hJcgFh, 0,
-"h$$mainZCMainzisat_e_hJcgFh ,(sat[hJcgFh] :: GHC.Integer.Type.Integer -> GHC.Base.String)", [], 0, 0, 256,
+h$setObjInfo(h$$mainZCMainzisat_e_YJcgGE, 0,
+"h$$mainZCMainzisat_e_YJcgGE, (sat[YJcgGE] :: GHC.Integer.Type.Integer -> GHC.Base.String)", [], 0, 0, 256,
 [h$baseZCGHCziShowzizdfShowInteger]);
-h$setObjInfo(h$$mainZCMainzisat_e_hJcgFj, 0, "h$$mainZCMainzisat_e_hJcgFj ,(sat[hJcgFj] :: GHC.Integer.Type.Integer)",
-[0], 0, 1, 256, [h$baseZCGHCziListziznzn, h$$mainZCMainzifibs_aBcfgy]);
-h$setObjInfo(h$$mainZCMainzisat_e_hJcgFs, 0, "h$$mainZCMainzisat_e_hJcgFs ,(sat[hJcgFs] :: GHC.Types.IO ())", [0], 0, 1,
+h$setObjInfo(h$$mainZCMainzisat_e_YJcgGG, 0, "h$$mainZCMainzisat_e_YJcgGG, (sat[YJcgGG] :: GHC.Integer.Type.Integer)",
+[0], 0, 1, 256, [h$baseZCGHCziListziznzn, h$$mainZCMainzifibs_RBcfh5]);
+h$setObjInfo(h$$mainZCMainzisat_e_YJcgGO, 0, "h$$mainZCMainzisat_e_YJcgGO, (sat[YJcgGO] :: GHC.Types.IO ())", [0], 0, 1,
 256, [h$baseZCGHCziConcziIOzithreadDelay, h$baseZCGHCziBasezizdfMonadIO, h$baseZCSystemziMemziperformGC,
-h$baseZCGHCziNumzizdfNumInt, h$$mainZCMainziloop_aBcfgz]);
-h$setObjInfo(h$$mainZCMainzisat_e_hJcgFr, 0, "h$$mainZCMainzisat_e_hJcgFr ,(sat[hJcgFr] :: GHC.Types.IO ())", [0], 0, 1,
+h$baseZCGHCziNumzizdfNumInt, h$$mainZCMainziloop_RBcfh6]);
+h$setObjInfo(h$$mainZCMainzisat_e_YJcgGN, 0, "h$$mainZCMainzisat_e_YJcgGN, (sat[YJcgGN] :: GHC.Types.IO ())", [0], 0, 1,
 256, [h$baseZCGHCziConcziIOzithreadDelay, h$baseZCGHCziBasezizdfMonadIO, h$baseZCGHCziNumzizdfNumInt,
-h$$mainZCMainziloop_aBcfgz]);
-h$setObjInfo(h$$mainZCMainzisat_e_hJcgFq, 0, "h$$mainZCMainzisat_e_hJcgFq ,(sat[hJcgFq] :: GHC.Types.IO ())", [0], 0, 1,
-256, [h$baseZCGHCziConcziIOzithreadDelay, h$baseZCGHCziBasezizdfMonadIO, h$baseZCGHCziNumzizdfNumInt,
-h$$mainZCMainziloop_aBcfgz]);
-h$setObjInfo(h$$mainZCMainzisat_e_hJcgFm, 0, "h$$mainZCMainzisat_e_hJcgFm ,(sat[hJcgFm] :: GHC.Types.IO ())", [], 0, 0,
+h$$mainZCMainziloop_RBcfh6]);
+h$setObjInfo(h$$mainZCMainzisat_e_YJcgGJ, 0, "h$$mainZCMainzisat_e_YJcgGJ, (sat[YJcgGJ] :: GHC.Types.IO ())", [], 0, 0,
 256, [h$baseZCGHCziConcziIOzithreadDelay]);
-h$setObjInfo(h$$mainZCMainzisat_e_hJcgFp, 0, "h$$mainZCMainzisat_e_hJcgFp ,(sat[hJcgFp] :: GHC.Types.IO ())", [0], 0, 1,
-256, [h$baseZCGHCziNumzizdfNumInt, h$$mainZCMainziloop_aBcfgz]);
-h$setObjInfo(h$$mainZCMainzisat_e_hJcgFo, 0, "h$$mainZCMainzisat_e_hJcgFo ,(sat[hJcgFo] :: GHC.Types.Int)", [0], 0, 1,
+h$setObjInfo(h$$mainZCMainzisat_e_YJcgGM, 0, "h$$mainZCMainzisat_e_YJcgGM, (sat[YJcgGM] :: GHC.Types.IO ())", [0], 0, 1,
+256, [h$baseZCGHCziNumzizdfNumInt, h$$mainZCMainziloop_RBcfh6]);
+h$setObjInfo(h$$mainZCMainzisat_e_YJcgGL, 0, "h$$mainZCMainzisat_e_YJcgGL, (sat[YJcgGL] :: GHC.Types.Int)", [0], 0, 1,
 256, [h$baseZCGHCziNumzizdfNumInt]);
-h$setObjInfo(h$$mainZCMainzia1_e_KBcfgu, 1, "h$$mainZCMainzia1_KBcfgu", [], 1, 0, 1, null);
-h$setObjInfo(h$$mainZCMainzia_e_JBcfgg, 1, "h$$mainZCMainzia_JBcfgg", [], 258, 0, 257, null);
+h$setObjInfo(h$$mainZCMainzia1_e_rBcfiR, 1, "h$$mainZCMainzia1_rBcfiR", [], 1, 0, 1, null);
+h$setObjInfo(h$$mainZCMainzia_e_qBcfiD, 1, "h$$mainZCMainzia_qBcfiD", [], 258, 0, 257, null);
 h$setObjInfo(h$$mainZCMain_i, (-1), "h$$mainZCMain_i", [7], 0, 1, 256, null);
-h$setObjInfo(h$$mainZCMainziputString_e_aBcfgx, 1, "h$$mainZCMainziputString_aBcfgx", [], 258, 0, 257, null);
-h$setObjInfo(h$$mainZCMainziupdateDOMs_e_9Bcffw, 1, "h$$mainZCMainziupdateDOMs_9Bcffw", [], 1, 0, 1, null);
-h$setObjInfo(h$mainZCMainzimain_e, 0, "h$mainZCMainzimain", [], 0, 0, 256, [h$$mainZCMainziloop_aBcfgz]);
+h$setObjInfo(h$$mainZCMainziputString_e_RBcfh4, 1, "h$$mainZCMainziputString_RBcfh4", [], 258, 0, 257, null);
+h$setObjInfo(h$$mainZCMainzicreateBox_e_QBcfh3, 1, "h$$mainZCMainzicreateBox_QBcfh3", [], 1, 0, 1, null);
+h$setObjInfo(h$mainZCMainzimain_e, 0, "h$mainZCMainzimain", [], 0, 0, 256, [h$baseZCGHCziBasezizdfMonadIO,
+h$$mainZCMainziloop_RBcfh6]);
+h$setObjInfo(h$$mainZCMainzisat_e_YJcgGQ, 0, "h$$mainZCMainzisat_e_YJcgGQ, (sat[YJcgGQ] :: GHC.Types.IO ())", [], 0, 0,
+256, [h$$mainZCMainziloop_RBcfh6]);
 h$setObjInfo(h$mainZCZCMainzimain_e, 0, "h$mainZCZCMainzimain", [], 0, 0, 256, [h$baseZCGHCziTopHandlerzirunMainIO,
 h$mainZCMainzimain]);

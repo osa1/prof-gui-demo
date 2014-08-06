@@ -1,8 +1,8 @@
-/home/omer/.ghcjs/x86_64-linux-0.1.0-7.8.2/ghcjs/shims/src/node.js
+/home/omer/.ghcjs/x86_64-linux-0.1.0-7.8.2/ghcjs/shims/src/platform.js
+/home/omer/.ghcjs/x86_64-linux-0.1.0-7.8.2/ghcjs/shims/src/goog.js
 /home/omer/.ghcjs/x86_64-linux-0.1.0-7.8.2/ghcjs/shims/lib/typedarray/typedarray.js
 /home/omer/.ghcjs/x86_64-linux-0.1.0-7.8.2/ghcjs/shims/lib/jsbn/jsbn_lib.js
-/home/omer/.ghcjs/x86_64-linux-0.1.0-7.8.2/ghcjs/shims/src/node-exports.js
-/home/omer/.ghcjs/x86_64-linux-0.1.0-7.8.2/ghcjs/shims/lib/closure-library/closure/goog/base.js
+/home/omer/.ghcjs/x86_64-linux-0.1.0-7.8.2/ghcjs/shims/lib/setImmediate/setImmediate.js
 /home/omer/.ghcjs/x86_64-linux-0.1.0-7.8.2/ghcjs/shims/lib/closure-library/closure/goog/math/long.js
 /home/omer/.ghcjs/x86_64-linux-0.1.0-7.8.2/ghcjs/shims/src/structs.js
 /home/omer/.ghcjs/x86_64-linux-0.1.0-7.8.2/ghcjs/shims/src/mem.js
@@ -23,4 +23,5 @@
 /home/omer/.ghcjs/x86_64-linux-0.1.0-7.8.2/ghcjs/shims/pkg/base.js
 /home/omer/.ghcjs/x86_64-linux-0.1.0-7.8.2/ghcjs/shims/pkg/bytestring.js
 /home/omer/.ghcjs/x86_64-linux-0.1.0-7.8.2/ghcjs/shims/src/object.js
+/home/omer/.ghcjs/x86_64-linux-0.1.0-7.8.2/ghcjs/shims/pkg/ghcjs-dom.js
 /home/omer/.ghcjs/x86_64-linux-0.1.0-7.8.2/ghcjs/shims/pkg/text.js

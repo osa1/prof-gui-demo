@@ -1,20 +1,78 @@
+/* platform-specific setup */
+// top-level debug initialization needs this. declare it in case we aren't in the same file as out.js
 function h$ghcjszmprimZCGHCJSziPrimziJSRef_con_e() { return h$stack[h$sp]; };
-if(typeof require !== 'undefined') {
-  var h$nodeFs = require('fs');
+/*
+   if browser mode is active (GHCJS_BROWSER is defined), all the runtime platform
+   detection code should be removed by the preprocessor. The h$isPlatform variables
+   are undeclared.
+
+   in non-browser mode, use h$isNode, h$isJsShell, h$isBrowser to find the current
+   platform.
+
+   more platforms should be added here in the future
+*/
+var h$isNode = false; // runtime is node.js
+var h$isJsShell = false; // runtime is SpiderMonkey jsshell
+var h$isBrowser = false; // running in browser or everything else
+// load all required node.js modules
+if(typeof process !== undefined && typeof require !== 'undefined' && typeof module !== 'undefined' && module.exports) {
+    h$isNode = true;
+    // we have to use these names for the closure compiler externs to work
+    var fs = require('fs');
+    var path = require('path');
+    var os = require('os');
+    var child_process = require('child_process');
+    var h$fs = fs;
+    var h$path = path;
+    var h$os = os;
+    var h$child = child_process;
+    var h$process = process;
+    var h$processConstants = process['binding']('constants');
+} else if(typeof snarf !== undefined && typeof evalInFrame !== 'undefined' && typeof enableStackWalkingAssertion !== 'undefined') {
+    h$isJsShell = true;
+    this.console = { log: this.print };
+} else {
+    h$isBrowser = true;
 }
+function h$getGlobal(that) {
+    if(typeof global !== 'undefined') return global;
+    return that;
+}
+/*
+  set up the google closure library. this is a rather hacky setup
+  to make it work with our shims without requiring compilation
+  or pulling in the google closure library module loader
+ */
 var goog = {};
-goog.global = this;
-goog.global.goog = goog;
-goog.global.CLOSURE_NO_DEPS = true;
+goog.global = h$getGlobal(this);
 goog.provide = function() { };
 goog.require = function() { };
 goog.isDef = function(val) { return val !== undefined; };
 goog.inherits = function(childCtor, parentCtor) {
+    /** @constructor */
   function tempCtor() {};
   tempCtor.prototype = parentCtor.prototype;
   childCtor.superClass_ = parentCtor.prototype;
   childCtor.prototype = new tempCtor();
+  /** @override */
   childCtor.prototype.constructor = childCtor;
+  /**
+   * Calls superclass constructor/method.
+   *
+   * This function is only available if you use goog.inherits to
+   * express inheritance relationships between classes.
+   *
+   * NOTE: This is a replacement for goog.base and for superClass_
+   * property defined in childCtor.
+   *
+   * @param {!Object} me Should always be "this".
+   * @param {string} methodName The method name to call. Calling
+   *     superclass constructor can be done with the special string
+   *     'constructor'.
+   * @param {...*} var_args The arguments to pass to superclass
+   *     method/constructor.
+   * @return {*} The return value of the superclass method/constructor.
+   */
   childCtor.base = function(me, methodName, var_args) {
     var args = Array.prototype.slice.call(arguments, 2);
     return parentCtor.prototype[methodName].apply(me, args);
@@ -28,6 +86,7 @@ goog.base = function(me, opt_methodName, var_args) {
                 'http://www.ecma-international.org/ecma-262/5.1/#sec-C');
   }
   if (caller.superClass_) {
+    // This is a constructor. Call the superclass constructor.
     return caller.superClass_.constructor.apply(
         me, Array.prototype.slice.call(arguments, 1));
   }
@@ -41,6 +100,10 @@ goog.base = function(me, opt_methodName, var_args) {
       return ctor.prototype[opt_methodName].apply(me, args);
     }
   }
+  // If we did not find the caller in the prototype chain, then one of two
+  // things happened:
+  // 1) The caller is an instance method.
+  // 2) This method was not called by the right caller.
   if (me[opt_methodName] === caller) {
     return me.constructor.prototype[opt_methodName].apply(me, args);
   } else {
@@ -49,20 +112,52 @@ goog.base = function(me, opt_methodName, var_args) {
         'to a method of a different name');
   }
 };
+goog.isString = function(v) {
+    return typeof v === 'string';
+}
 goog.math = {};
 goog.crypt = {};
-if(this['print'] !== undefined && this['console'] === undefined) {
-  this['console'] = { log: this['print'] };
-}
-if (!Date.now) {
-  Date.now = function now() {
-    return +(new Date);
-  };
-}
+/*
+ Copyright (c) 2010, Linden Research, Inc.
+ Copyright (c) 2014, Joshua Bell
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights
+ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ copies of the Software, and to permit persons to whom the Software is
+ furnished to do so, subject to the following conditions:
+
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE SOFTWARE.
+ $/LicenseInfo$
+ */
+// Original can be found at:
+//   https://bitbucket.org/lindenlab/llsd
+// Modifications by Joshua Bell inexorabletash@gmail.com
+//   https://github.com/inexorabletash/polyfill
+// ES3/ES5 implementation of the Krhonos Typed Array Specification
+//   Ref: http://www.khronos.org/registry/typedarray/specs/latest/
+//   Date: 2011-02-01
+//
+// Variations:
+//  * Allows typed_array.get/set() as alias for subscripts (typed_array[])
+//  * Gradually migrating structure from Khronos spec to ES6 spec
 (function(global) {
   'use strict';
-  var undefined = (void 0);
+  var undefined = (void 0); // Paranoia
+  // Beyond this value, index getters/setters (i.e. array[0], array[1]) are so slow to
+  // create, and consume so much memory, that the browser appears frozen.
   var MAX_ARRAY_LENGTH = 1e5;
+  // Approximations of internal ECMAScript conversion functions
   function Type(v) {
     switch(typeof v) {
     case 'undefined': return 'undefined';
@@ -72,6 +167,7 @@ if (!Date.now) {
     default: return v === null ? 'null' : 'object';
     }
   }
+  // Class returns internal [[Class]] property, used to avoid cross-frame instanceof issues:
   function Class(v) { return Object.prototype.toString.call(v).replace(/^\[object *|\]$/g, ''); }
   function IsCallable(o) { return typeof o === 'function'; }
   function ToObject(v) {
@@ -80,6 +176,7 @@ if (!Date.now) {
   }
   function ToInt32(v) { return v >> 0; }
   function ToUint32(v) { return v >>> 0; }
+  // Snapshot intrinsics
   var LN2 = Math.LN2,
       abs = Math.abs,
       floor = Math.floor,
@@ -88,11 +185,16 @@ if (!Date.now) {
       min = Math.min,
       pow = Math.pow,
       round = Math.round;
+  // emulate ES5 getter/setter API using legacy APIs
+  // http://blogs.msdn.com/b/ie/archive/2010/09/07/transitioning-existing-code-to-the-es5-getter-setter-apis.aspx
+  // (second clause tests for Object.defineProperty() in IE<9 that only supports extending DOM prototypes, but
+  // note that IE<9 does not support __defineGetter__ or __defineSetter__ so it just renders the method harmless)
   (function() {
     var orig = Object.defineProperty;
     var dom_only = !(function(){try{return Object.defineProperty({},'x',{});}catch(_){return false;}}());
     if (!orig || dom_only) {
       Object.defineProperty = function (o, prop, desc) {
+        // In IE8 try built-in implementation for defining properties on DOM prototypes.
         if (orig)
           try { return orig(o, prop, desc); } catch (_) {}
         if (o !== Object(o))
@@ -107,6 +209,8 @@ if (!Date.now) {
       };
     }
   }());
+  // ES5: Make obj[index] an alias for obj._getter(index)/obj._setter(index, value)
+  // for index in 0 ... obj.length
   function makeArrayAccessors(obj) {
     if (obj.length > MAX_ARRAY_LENGTH) throw RangeError('Array too large for polyfill');
     function makeArrayAccessor(index) {
@@ -122,6 +226,9 @@ if (!Date.now) {
       makeArrayAccessor(i);
     }
   }
+  // Internal conversion functions:
+  //    pack<Type>()   - take a number (interpreted as Type), output a byte array
+  //    unpack<Type>() - take a byte array, output a Type-like number
   function as_signed(value, bits) { var s = 32 - bits; return (value << s) >> s; }
   function as_unsigned(value, bits) { var s = 32 - bits; return (value << s) >>> s; }
   function packI8(n) { return [n & 0xff]; }
@@ -149,7 +256,10 @@ if (!Date.now) {
         return w + 1;
       return w % 2 ? w + 1 : w;
     }
+    // Compute sign, exponent, fraction
     if (v !== v) {
+      // NaN
+      // http://dev.w3.org/2006/webapi/WebIDL/#es-type-mapping
       e = (1 << ebits) - 1; f = pow(2, fbits - 1); s = 0;
     } else if (v === Infinity || v === -Infinity) {
       e = (1 << ebits) - 1; f = 0; s = (v < 0) ? 1 : 0;
@@ -166,23 +276,28 @@ if (!Date.now) {
           f = 1;
         }
         if (e > bias) {
+          // Overflow
           e = (1 << ebits) - 1;
           f = 0;
         } else {
+          // Normalized
           e = e + bias;
           f = f - pow(2, fbits);
         }
       } else {
+        // Denormalized
         e = 0;
         f = roundToEven(v / pow(2, 1 - bias - fbits));
       }
     }
+    // Pack sign, exponent, fraction
     bits = [];
     for (i = fbits; i; i -= 1) { bits.push(f % 2 ? 1 : 0); f = floor(f / 2); }
     for (i = ebits; i; i -= 1) { bits.push(e % 2 ? 1 : 0); e = floor(e / 2); }
     bits.push(s ? 1 : 0);
     bits.reverse();
     str = bits.join('');
+    // Bits to bytes
     bytes = [];
     while (str.length) {
       bytes.push(parseInt(str.substring(0, 8), 2));
@@ -191,6 +306,7 @@ if (!Date.now) {
     return bytes;
   }
   function unpackIEEE754(bytes, ebits, fbits) {
+    // Bytes to bits
     var bits = [], i, j, b, str,
         bias, s, e, f;
     for (i = bytes.length; i; i -= 1) {
@@ -201,15 +317,19 @@ if (!Date.now) {
     }
     bits.reverse();
     str = bits.join('');
+    // Unpack sign, exponent, fraction
     bias = (1 << (ebits - 1)) - 1;
     s = parseInt(str.substring(0, 1), 2) ? -1 : 1;
     e = parseInt(str.substring(1, 1 + ebits), 2);
     f = parseInt(str.substring(1 + ebits), 2);
+    // Produce number
     if (e === (1 << ebits) - 1) {
       return f !== 0 ? NaN : s * Infinity;
     } else if (e > 0) {
+      // Normalized
       return s * pow(2, e - bias) * (1 + f / pow(2, fbits));
     } else if (f !== 0) {
+      // Denormalized
       return s * pow(2, -(bias - 1)) * (f / pow(2, fbits));
     } else {
       return s < 0 ? -0 : 0;
@@ -219,6 +339,9 @@ if (!Date.now) {
   function packF64(v) { return packIEEE754(v, 11, 52); }
   function unpackF32(b) { return unpackIEEE754(b, 8, 23); }
   function packF32(v) { return packIEEE754(v, 8, 23); }
+  //
+  // 3 The ArrayBuffer Type
+  //
   (function() {
     function ArrayBuffer(length) {
       length = ToInt32(length);
@@ -229,7 +352,11 @@ if (!Date.now) {
         this._bytes[i] = 0;
     }
     global.ArrayBuffer = global.ArrayBuffer || ArrayBuffer;
+    //
+    // 5 The Typed Array View Types
+    //
     function $TypedArray$() {
+      // %TypedArray% ( length )
       if (!arguments.length || typeof arguments[0] !== 'object') {
         return (function(length) {
           length = ToInt32(length);
@@ -240,6 +367,7 @@ if (!Date.now) {
           Object.defineProperty(this, 'byteOffset', {value: 0});
          }).apply(this, arguments);
       }
+      // %TypedArray% ( typedArray )
       if (arguments.length >= 1 &&
           Type(arguments[0]) === 'object' &&
           arguments[0] instanceof $TypedArray$) {
@@ -254,6 +382,7 @@ if (!Date.now) {
             this._setter(i, typedArray._getter(i));
         }).apply(this, arguments);
       }
+      // %TypedArray% ( array )
       if (arguments.length >= 1 &&
           Type(arguments[0]) === 'object' &&
           !(arguments[0] instanceof $TypedArray$) &&
@@ -270,6 +399,7 @@ if (!Date.now) {
           }
         }).apply(this, arguments);
       }
+      // %TypedArray% ( buffer, byteOffset=0, length=undefined )
       if (arguments.length >= 1 &&
           Type(arguments[0]) === 'object' &&
           (arguments[0] instanceof ArrayBuffer || Class(arguments[0]) === 'ArrayBuffer')) {
@@ -277,6 +407,8 @@ if (!Date.now) {
           byteOffset = ToUint32(byteOffset);
           if (byteOffset > buffer.byteLength)
             throw RangeError('byteOffset out of range');
+          // The given byteOffset must be a multiple of the element
+          // size of the specific type, otherwise an exception is raised.
           if (byteOffset % this.BYTES_PER_ELEMENT)
             throw RangeError('buffer length minus the byteOffset is not a multiple of the element size.');
           if (length === undefined) {
@@ -296,16 +428,22 @@ if (!Date.now) {
           Object.defineProperty(this, 'length', {value: length});
         }).apply(this, arguments);
       }
+      // %TypedArray% ( all other argument combinations )
       throw TypeError();
     }
+    // Properties of the %TypedArray Instrinsic Object
+    // %TypedArray%.from ( source , mapfn=undefined, thisArg=undefined )
     Object.defineProperty($TypedArray$, 'from', {value: function(iterable) {
       return new this(iterable);
     }});
-    Object.defineProperty($TypedArray$, 'of', {value: function( ) {
+    // %TypedArray%.of ( ...items )
+    Object.defineProperty($TypedArray$, 'of', {value: function(/*...items*/) {
       return new this(arguments);
     }});
+    // %TypedArray%.prototype
     var $TypedArrayPrototype$ = {};
     $TypedArray$.prototype = $TypedArrayPrototype$;
+    // WebIDL: getter type (unsigned long index);
     Object.defineProperty($TypedArray$.prototype, '_getter', {value: function(index) {
       if (arguments.length < 1) throw SyntaxError('Not enough arguments');
       index = ToUint32(index);
@@ -319,7 +457,9 @@ if (!Date.now) {
       }
       return this._unpack(bytes);
     }});
+    // NONSTANDARD: convenience alias for getter: type get(unsigned long index);
     Object.defineProperty($TypedArray$.prototype, 'get', {value: $TypedArray$.prototype._getter});
+    // WebIDL: setter void (unsigned long index, type value);
     Object.defineProperty($TypedArray$.prototype, '_setter', {value: function(index, value) {
       if (arguments.length < 2) throw SyntaxError('Not enough arguments');
       index = ToUint32(index);
@@ -332,7 +472,13 @@ if (!Date.now) {
         this.buffer._bytes[o] = bytes[i];
       }
     }});
+    // get %TypedArray%.prototype.buffer
+    // get %TypedArray%.prototype.byteLength
+    // get %TypedArray%.prototype.byteOffset
+    // -- applied directly to the object in the constructor
+    // %TypedArray%.prototype.constructor
     Object.defineProperty($TypedArray$.prototype, 'constructor', {value: $TypedArray$});
+    // %TypedArray%.prototype.copyWithin (target, start, end = this.length )
     Object.defineProperty($TypedArray$.prototype, 'copyWithin', {value: function(target, start) {
       var end = arguments[2];
       var o = ToObject(this);
@@ -356,12 +502,12 @@ if (!Date.now) {
         relativeEnd = len;
       else
         relativeEnd = ToInt32(end);
-      var final;
+      var final0;
       if (relativeEnd < 0)
-        final = max(len + relativeEnd, 0);
+        final0 = max(len + relativeEnd, 0);
       else
-        final = min(relativeEnd, len);
-      var count = min(final - from, len - to);
+        final0 = min(relativeEnd, len);
+      var count = min(final0 - from, len - to);
       var direction;
       if (from < to && to < from + count) {
         direction = -1;
@@ -378,6 +524,9 @@ if (!Date.now) {
       }
       return o;
     }});
+    // %TypedArray%.prototype.entries ( )
+    // -- defined in es6.js to shim browsers w/ native TypedArrays
+    // %TypedArray%.prototype.every ( callbackfn, thisArg = undefined )
     Object.defineProperty($TypedArray$.prototype, 'every', {value: function(callbackfn) {
       if (this === undefined || this === null) throw TypeError();
       var t = Object(this);
@@ -390,6 +539,7 @@ if (!Date.now) {
       }
       return true;
     }});
+    // %TypedArray%.prototype.fill (value, start = 0, end = this.length )
     Object.defineProperty($TypedArray$.prototype, 'fill', {value: function(value) {
       var start = arguments[1],
           end = arguments[2];
@@ -408,17 +558,18 @@ if (!Date.now) {
         relativeEnd = len;
       else
         relativeEnd = ToInt32(end);
-      var final;
+      var final0;
       if (relativeEnd < 0)
-        final = max((len + relativeEnd), 0);
+        final0 = max((len + relativeEnd), 0);
       else
-        final = min(relativeEnd, len);
-      while (k < final) {
+        final0 = min(relativeEnd, len);
+      while (k < final0) {
         o._setter(k, value);
         k += 1;
       }
       return o;
     }});
+    // %TypedArray%.prototype.filter ( callbackfn, thisArg = undefined )
     Object.defineProperty($TypedArray$.prototype, 'filter', {value: function(callbackfn) {
       if (this === undefined || this === null) throw TypeError();
       var t = Object(this);
@@ -427,12 +578,13 @@ if (!Date.now) {
       var res = [];
       var thisp = arguments[1];
       for (var i = 0; i < len; i++) {
-        var val = t._getter(i);
+        var val = t._getter(i); // in case fun mutates this
         if (callbackfn.call(thisp, val, i, t))
           res.push(val);
       }
       return new this.constructor(res);
     }});
+    // %TypedArray%.prototype.find (predicate, thisArg = undefined)
     Object.defineProperty($TypedArray$.prototype, 'find', {value: function(predicate) {
       var o = ToObject(this);
       var lenValue = o.length;
@@ -449,6 +601,7 @@ if (!Date.now) {
       }
       return undefined;
     }});
+    // %TypedArray%.prototype.findIndex ( predicate, thisArg = undefined )
     Object.defineProperty($TypedArray$.prototype, 'findIndex', {value: function(predicate) {
       var o = ToObject(this);
       var lenValue = o.length;
@@ -465,6 +618,7 @@ if (!Date.now) {
       }
       return -1;
     }});
+    // %TypedArray%.prototype.forEach ( callbackfn, thisArg = undefined )
     Object.defineProperty($TypedArray$.prototype, 'forEach', {value: function(callbackfn) {
       if (this === undefined || this === null) throw TypeError();
       var t = Object(this);
@@ -474,6 +628,7 @@ if (!Date.now) {
       for (var i = 0; i < len; i++)
         callbackfn.call(thisp, t._getter(i), i, t);
     }});
+    // %TypedArray%.prototype.indexOf (searchElement, fromIndex = 0 )
     Object.defineProperty($TypedArray$.prototype, 'indexOf', {value: function(searchElement) {
       if (this === undefined || this === null) throw TypeError();
       var t = Object(this);
@@ -497,6 +652,7 @@ if (!Date.now) {
       }
       return -1;
     }});
+    // %TypedArray%.prototype.join ( separator )
     Object.defineProperty($TypedArray$.prototype, 'join', {value: function(separator) {
       if (this === undefined || this === null) throw TypeError();
       var t = Object(this);
@@ -504,8 +660,11 @@ if (!Date.now) {
       var tmp = Array(len);
       for (var i = 0; i < len; ++i)
         tmp[i] = t._getter(i);
-      return tmp.join(separator === undefined ? ',' : separator);
+      return tmp.join(separator === undefined ? ',' : separator); // Hack for IE7
     }});
+    // %TypedArray%.prototype.keys ( )
+    // -- defined in es6.js to shim browsers w/ native TypedArrays
+    // %TypedArray%.prototype.lastIndexOf ( searchElement, fromIndex = this.length-1 )
     Object.defineProperty($TypedArray$.prototype, 'lastIndexOf', {value: function(searchElement) {
       if (this === undefined || this === null) throw TypeError();
       var t = Object(this);
@@ -527,6 +686,9 @@ if (!Date.now) {
       }
       return -1;
     }});
+    // get %TypedArray%.prototype.length
+    // -- applied directly to the object in the constructor
+    // %TypedArray%.prototype.map ( callbackfn, thisArg = undefined )
     Object.defineProperty($TypedArray$.prototype, 'map', {value: function(callbackfn) {
       if (this === undefined || this === null) throw TypeError();
       var t = Object(this);
@@ -538,11 +700,13 @@ if (!Date.now) {
         res[i] = callbackfn.call(thisp, t._getter(i), i, t);
       return new this.constructor(res);
     }});
+    // %TypedArray%.prototype.reduce ( callbackfn [, initialValue] )
     Object.defineProperty($TypedArray$.prototype, 'reduce', {value: function(callbackfn) {
       if (this === undefined || this === null) throw TypeError();
       var t = Object(this);
       var len = ToUint32(t.length);
       if (!IsCallable(callbackfn)) throw TypeError();
+      // no value to return if no initial value and an empty array
       if (len === 0 && arguments.length === 1) throw TypeError();
       var k = 0;
       var accumulator;
@@ -557,11 +721,13 @@ if (!Date.now) {
       }
       return accumulator;
     }});
+    // %TypedArray%.prototype.reduceRight ( callbackfn [, initialValue] )
     Object.defineProperty($TypedArray$.prototype, 'reduceRight', {value: function(callbackfn) {
       if (this === undefined || this === null) throw TypeError();
       var t = Object(this);
       var len = ToUint32(t.length);
       if (!IsCallable(callbackfn)) throw TypeError();
+      // no value to return if no initial value, empty array
       if (len === 0 && arguments.length === 1) throw TypeError();
       var k = len - 1;
       var accumulator;
@@ -576,6 +742,7 @@ if (!Date.now) {
       }
       return accumulator;
     }});
+    // %TypedArray%.prototype.reverse ( )
     Object.defineProperty($TypedArray$.prototype, 'reverse', {value: function() {
       if (this === undefined || this === null) throw TypeError();
       var t = Object(this);
@@ -588,12 +755,17 @@ if (!Date.now) {
       }
       return t;
     }});
+    // %TypedArray%.prototype.set(array, offset = 0 )
+    // %TypedArray%.prototype.set(typedArray, offset = 0 )
+    // WebIDL: void set(TypedArray array, optional unsigned long offset);
+    // WebIDL: void set(sequence<type> array, optional unsigned long offset);
     Object.defineProperty($TypedArray$.prototype, 'set', {value: function(index, value) {
       if (arguments.length < 1) throw SyntaxError('Not enough arguments');
       var array, sequence, offset, len,
           i, s, d,
           byteOffset, byteLength, tmp;
       if (typeof arguments[0] === 'object' && arguments[0].constructor === this.constructor) {
+        // void set(TypedArray array, optional unsigned long offset);
         array = arguments[0];
         offset = ToUint32(arguments[1]);
         if (offset + array.length > this.length) {
@@ -616,6 +788,7 @@ if (!Date.now) {
           }
         }
       } else if (typeof arguments[0] === 'object' && typeof arguments[0].length !== 'undefined') {
+        // void set(sequence<type> array, optional unsigned long offset);
         sequence = arguments[0];
         len = ToUint32(sequence.length);
         offset = ToUint32(arguments[1]);
@@ -630,6 +803,7 @@ if (!Date.now) {
         throw TypeError('Unexpected argument type(s)');
       }
     }});
+    // %TypedArray%.prototype.slice ( start, end )
     Object.defineProperty($TypedArray$.prototype, 'slice', {value: function(start, end) {
       var o = ToObject(this);
       var lenVal = o.length;
@@ -637,12 +811,12 @@ if (!Date.now) {
       var relativeStart = ToInt32(start);
       var k = (relativeStart < 0) ? max(len + relativeStart, 0) : min(relativeStart, len);
       var relativeEnd = (end === undefined) ? len : ToInt32(end);
-      var final = (relativeEnd < 0) ? max(len + relativeEnd, 0) : min(relativeEnd, len);
-      var count = final - k;
+      var final0 = (relativeEnd < 0) ? max(len + relativeEnd, 0) : min(relativeEnd, len);
+      var count = final0 - k;
       var c = o.constructor;
       var a = new c(count);
       var n = 0;
-      while (k < final) {
+      while (k < final0) {
         var kValue = o._getter(k);
         a._setter(n, kValue);
         ++k;
@@ -650,6 +824,7 @@ if (!Date.now) {
       }
       return a;
     }});
+    // %TypedArray%.prototype.some ( callbackfn, thisArg = undefined )
     Object.defineProperty($TypedArray$.prototype, 'some', {value: function(callbackfn) {
       if (this === undefined || this === null) throw TypeError();
       var t = Object(this);
@@ -663,6 +838,7 @@ if (!Date.now) {
       }
       return false;
     }});
+    // %TypedArray%.prototype.sort ( comparefn )
     Object.defineProperty($TypedArray$.prototype, 'sort', {value: function(comparefn) {
       if (this === undefined || this === null) throw TypeError();
       var t = Object(this);
@@ -670,11 +846,13 @@ if (!Date.now) {
       var tmp = Array(len);
       for (var i = 0; i < len; ++i)
         tmp[i] = t._getter(i);
-      if (comparefn) tmp.sort(comparefn); else tmp.sort();
+      if (comparefn) tmp.sort(comparefn); else tmp.sort(); // Hack for IE8/9
       for (i = 0; i < len; ++i)
         t._setter(i, tmp[i]);
       return t;
     }});
+    // %TypedArray%.prototype.subarray(begin = 0, end = this.length )
+    // WebIDL: TypedArray subarray(long begin, optional long end);
     Object.defineProperty($TypedArray$.prototype, 'subarray', {value: function(start, end) {
       function clamp(v, min, max) { return v < min ? min : v > max ? max : v; }
       start = ToInt32(start);
@@ -692,7 +870,15 @@ if (!Date.now) {
       return new this.constructor(
         this.buffer, this.byteOffset + start * this.BYTES_PER_ELEMENT, len);
     }});
+    // %TypedArray%.prototype.toLocaleString ( )
+    // %TypedArray%.prototype.toString ( )
+    // %TypedArray%.prototype.values ( )
+    // %TypedArray%.prototype [ @@iterator ] ( )
+    // get %TypedArray%.prototype [ @@toStringTag ]
+    // -- defined in es6.js to shim browsers w/ native TypedArrays
     function makeTypedArray(elementSize, pack, unpack) {
+      // Each TypedArray type requires a distinct constructor instance with
+      // identical logic, which this produces.
       var TypedArray = function() {
         Object.defineProperty(this, 'constructor', {value: TypedArray});
         $TypedArray$.apply(this, arguments);
@@ -732,6 +918,9 @@ if (!Date.now) {
     global.Float32Array = global.Float32Array || Float32Array;
     global.Float64Array = global.Float64Array || Float64Array;
   }());
+  //
+  // 6 The DataView View Type
+  //
   (function() {
     function r(array, index) {
       return IsCallable(array.get) ? array.get(index) : array[index];
@@ -741,6 +930,10 @@ if (!Date.now) {
           u8array = new Uint8Array(u16array.buffer);
       return r(u8array, 0) === 0x12;
     }());
+    // DataView(buffer, byteOffset=0, byteLength=undefined)
+    // WebIDL: Constructor(ArrayBuffer buffer,
+    //                     optional unsigned long byteOffset,
+    //                     optional unsigned long byteLength)
     function DataView(buffer, byteOffset, byteLength) {
       if (!(buffer instanceof ArrayBuffer || Class(buffer) === 'ArrayBuffer')) throw TypeError();
       byteOffset = ToUint32(byteOffset);
@@ -756,6 +949,10 @@ if (!Date.now) {
       Object.defineProperty(this, 'byteLength', {value: byteLength});
       Object.defineProperty(this, 'byteOffset', {value: byteOffset});
     };
+    // get DataView.prototype.buffer
+    // get DataView.prototype.byteLength
+    // get DataView.prototype.byteOffset
+    // -- applied directly to instances by the constructor
     function makeGetter(arrayType) {
       return function GetViewValue(byteOffset, littleEndian) {
         byteOffset = ToUint32(byteOffset);
@@ -784,13 +981,16 @@ if (!Date.now) {
         byteOffset = ToUint32(byteOffset);
         if (byteOffset + arrayType.BYTES_PER_ELEMENT > this.byteLength)
           throw RangeError('Array index out of range');
+        // Get bytes
         var typeArray = new arrayType([value]),
             byteArray = new Uint8Array(typeArray.buffer),
             bytes = [], i, byteView;
         for (i = 0; i < arrayType.BYTES_PER_ELEMENT; i += 1)
           bytes.push(r(byteArray, i));
+        // Flip if necessary
         if (Boolean(littleEndian) === Boolean(IS_BIG_ENDIAN))
           bytes.reverse();
+        // Write them
         byteView = new Uint8Array(this.buffer, byteOffset, arrayType.BYTES_PER_ELEMENT);
         byteView.set(bytes);
       };
@@ -805,12 +1005,21 @@ if (!Date.now) {
     Object.defineProperty(DataView.prototype, 'setFloat64', {value: makeSetter(Float64Array)});
     global.DataView = global.DataView || DataView;
   }());
-}(this));
-var BigInteger = function() {
+}(h$getGlobal(this)));
+/** @constructor */
+var BigInteger = (function() {
 var dbits, DV, BI_FP;
+// Copyright (c) 2005  Tom Wu
+// All Rights Reserved.
+// See "LICENSE" for details.
+// Basic JavaScript BN library - subset useful for RSA encryption.
+// Bits per digit
 var dbits;
+// JavaScript engine analysis
 var canary = 0xdeadbeefcafe;
 var j_lm = ((canary&0xffffff)==0xefcafe);
+// (public) Constructor
+/** @constructor */
 function BigInteger(a,b,c) {
   this.data = [];
   if(a != null)
@@ -818,7 +1027,15 @@ function BigInteger(a,b,c) {
     else if(b == null && "string" != typeof a) this.fromString(a,256);
     else this.fromString(a,b);
 }
+// return new, unset BigInteger
 function nbi() { return new BigInteger(null); }
+// am: Compute w_j += (x*this_i), propagate carries,
+// c is initial carry, returns final carry.
+// c < 3*dvalue, x < 2*dvalue, this_i < dvalue
+// We need to select the fastest one that works in this environment.
+// am1: use a single mult and divide to get the high bits,
+// max digit bits should be 26 because
+// max internal value = 2*dvalue^2-2*dvalue (< 2^53)
 function am1(i,x,w,j,c,n) {
   while(--n >= 0) {
     var v = x*this.data[i++]+w.data[j]+c;
@@ -827,6 +1044,9 @@ function am1(i,x,w,j,c,n) {
   }
   return c;
 }
+// am2 avoids a big mult-and-extract completely.
+// Max digit bits should be <= 30 because we do bitwise ops
+// on values up to 2*hdvalue^2-hdvalue-1 (< 2^31)
 function am2(i,x,w,j,c,n) {
   var xl = x&0x7fff, xh = x>>15;
   while(--n >= 0) {
@@ -839,6 +1059,8 @@ function am2(i,x,w,j,c,n) {
   }
   return c;
 }
+// Alternately, set max digit bits to 28 since some
+// browsers slow down when dealing with 32-bit numbers.
 function am3(i,x,w,j,c,n) {
   var xl = x&0x3fff, xh = x>>14;
   while(--n >= 0) {
@@ -851,6 +1073,7 @@ function am3(i,x,w,j,c,n) {
   }
   return c;
 }
+// node.js (no browser)
 if(typeof(navigator) === 'undefined')
 {
    BigInteger.prototype.am = am3;
@@ -864,7 +1087,7 @@ else if(j_lm && (navigator.appName != "Netscape")) {
   BigInteger.prototype.am = am1;
   dbits = 26;
 }
-else {
+else { // Mozilla/Netscape seems to prefer am3
   BigInteger.prototype.am = am3;
   dbits = 28;
 }
@@ -875,6 +1098,7 @@ var BI_FP = 52;
 BigInteger.prototype.FV = Math.pow(2,BI_FP);
 BigInteger.prototype.F1 = BI_FP-dbits;
 BigInteger.prototype.F2 = 2*dbits-BI_FP;
+// Digit conversions
 var BI_RM = "0123456789abcdefghijklmnopqrstuvwxyz";
 var BI_RC = new Array();
 var rr,vv;
@@ -889,11 +1113,13 @@ function intAt(s,i) {
   var c = BI_RC[s.charCodeAt(i)];
   return (c==null)?-1:c;
 }
+// (protected) copy this to r
 function bnpCopyTo(r) {
   for(var i = this.t-1; i >= 0; --i) r.data[i] = this.data[i];
   r.t = this.t;
   r.s = this.s;
 }
+// (protected) set from integer value x, -DV <= x < DV
 function bnpFromInt(x) {
   this.t = 1;
   this.s = (x<0)?-1:0;
@@ -901,12 +1127,14 @@ function bnpFromInt(x) {
   else if(x < -1) this.data[0] = x+DV;
   else this.t = 0;
 }
+// return bigint initialized to value
 function nbv(i) { var r = nbi(); r.fromInt(i); return r; }
+// (protected) set from string and radix
 function bnpFromString(s,b) {
   var k;
   if(b == 16) k = 4;
   else if(b == 8) k = 3;
-  else if(b == 256) k = 8;
+  else if(b == 256) k = 8; // byte array
   else if(b == 2) k = 1;
   else if(b == 32) k = 5;
   else if(b == 4) k = 2;
@@ -939,10 +1167,12 @@ function bnpFromString(s,b) {
   this.clamp();
   if(mi) BigInteger.ZERO.subTo(this,this);
 }
+// (protected) clamp off excess high words
 function bnpClamp() {
   var c = this.s&this.DM;
   while(this.t > 0 && this.data[this.t-1] == c) --this.t;
 }
+// (public) return string representation in given radix
 function bnToString(b) {
   if(this.s < 0) return "-"+this.negate().toString(b);
   var k;
@@ -971,8 +1201,11 @@ function bnToString(b) {
   }
   return m?r:"0";
 }
+// (public) -this
 function bnNegate() { var r = nbi(); BigInteger.ZERO.subTo(this,r); return r; }
+// (public) |this|
 function bnAbs() { return (this.s<0)?this.negate():this; }
+// (public) return + if this > a, - if this < a, 0 if equal
 function bnCompareTo(a) {
   var r = this.s-a.s;
   if(r != 0) return r;
@@ -982,6 +1215,7 @@ function bnCompareTo(a) {
   while(--i >= 0) if((r=this.data[i]-a.data[i]) != 0) return r;
   return 0;
 }
+// returns bit length of the integer x
 function nbits(x) {
   var r = 1, t;
   if((t=x>>>16) != 0) { x = t; r += 16; }
@@ -991,10 +1225,12 @@ function nbits(x) {
   if((t=x>>1) != 0) { x = t; r += 1; }
   return r;
 }
+// (public) return the number of bits in "this"
 function bnBitLength() {
   if(this.t <= 0) return 0;
   return this.DB*(this.t-1)+nbits(this.data[this.t-1]^(this.s&this.DM));
 }
+// (protected) r = this << n*DB
 function bnpDLShiftTo(n,r) {
   var i;
   for(i = this.t-1; i >= 0; --i) r.data[i+n] = this.data[i];
@@ -1002,11 +1238,13 @@ function bnpDLShiftTo(n,r) {
   r.t = this.t+n;
   r.s = this.s;
 }
+// (protected) r = this >> n*DB
 function bnpDRShiftTo(n,r) {
   for(var i = n; i < this.t; ++i) r.data[i-n] = this.data[i];
   r.t = Math.max(this.t-n,0);
   r.s = this.s;
 }
+// (protected) r = this << n
 function bnpLShiftTo(n,r) {
   var bs = n%this.DB;
   var cbs = this.DB-bs;
@@ -1022,6 +1260,7 @@ function bnpLShiftTo(n,r) {
   r.s = this.s;
   r.clamp();
 }
+// (protected) r = this >> n
 function bnpRShiftTo(n,r) {
   r.s = this.s;
   var ds = Math.floor(n/this.DB);
@@ -1038,6 +1277,7 @@ function bnpRShiftTo(n,r) {
   r.t = this.t-ds;
   r.clamp();
 }
+// (protected) r = this - a
 function bnpSubTo(a,r) {
   var i = 0, c = 0, m = Math.min(a.t,this.t);
   while(i < m) {
@@ -1069,6 +1309,8 @@ function bnpSubTo(a,r) {
   r.t = i;
   r.clamp();
 }
+// (protected) r = this * a, r != this,a (HAC 14.12)
+// "this" should be the larger one if appropriate.
 function bnpMultiplyTo(a,r) {
   var x = this.abs(), y = a.abs();
   var i = x.t;
@@ -1079,6 +1321,7 @@ function bnpMultiplyTo(a,r) {
   r.clamp();
   if(this.s != a.s) BigInteger.ZERO.subTo(r,r);
 }
+// (protected) r = this^2, r != this (HAC 14.16)
 function bnpSquareTo(r) {
   var x = this.abs();
   var i = r.t = 2*x.t;
@@ -1094,6 +1337,8 @@ function bnpSquareTo(r) {
   r.s = 0;
   r.clamp();
 }
+// (protected) divide this by m, quotient and remainder to q, r (HAC 14.20)
+// r != q, this != m.  q or r may be null.
 function bnpDivRemTo(m,q,r) {
   var pm = m.abs();
   if(pm.t <= 0) return;
@@ -1105,7 +1350,7 @@ function bnpDivRemTo(m,q,r) {
   }
   if(r == null) r = nbi();
   var y = nbi(), ts = this.s, ms = m.s;
-  var nsh = this.DB-nbits(pm.data[pm.t-1]);
+  var nsh = this.DB-nbits(pm.data[pm.t-1]); // normalize modulus
   if(nsh > 0) { pm.lShiftTo(nsh,y); pt.lShiftTo(nsh,r); }
   else { pm.copyTo(y); pt.copyTo(r); }
   var ys = y.t;
@@ -1120,11 +1365,12 @@ function bnpDivRemTo(m,q,r) {
     r.subTo(t,r);
   }
   BigInteger.ONE.dlShiftTo(ys,t);
-  t.subTo(y,y);
+  t.subTo(y,y); // "negative" y so we can replace sub with am later
   while(y.t < ys) y.data[y.t++] = 0;
   while(--j >= 0) {
+    // Estimate quotient digit
     var qd = (r.data[--i]==y0)?this.DM:Math.floor(r.data[i]*d1+(r.data[i-1]+e)*d2);
-    if((r.data[i]+=y.am(0,qd,r,j,0,ys)) < qd) {
+    if((r.data[i]+=y.am(0,qd,r,j,0,ys)) < qd) { // Try it out
       y.dlShiftTo(j,t);
       r.subTo(t,r);
       while(r.data[i] < --qd) r.subTo(t,r);
@@ -1136,15 +1382,18 @@ function bnpDivRemTo(m,q,r) {
   }
   r.t = ys;
   r.clamp();
-  if(nsh > 0) r.rShiftTo(nsh,r);
+  if(nsh > 0) r.rShiftTo(nsh,r); // Denormalize remainder
   if(ts < 0) BigInteger.ZERO.subTo(r,r);
 }
+// (public) this mod a
 function bnMod(a) {
   var r = nbi();
   this.abs().divRemTo(a,null,r);
   if(this.s < 0 && r.compareTo(BigInteger.ZERO) > 0) a.subTo(r,r);
   return r;
 }
+// Modular reduction using "classic" algorithm
+/** @constructor */
 function Classic(m) { this.m = m; }
 function cConvert(x) {
   if(x.s < 0 || x.compareTo(this.m) >= 0) return x.mod(this.m);
@@ -1159,17 +1408,32 @@ Classic.prototype.revert = cRevert;
 Classic.prototype.reduce = cReduce;
 Classic.prototype.mulTo = cMulTo;
 Classic.prototype.sqrTo = cSqrTo;
+// (protected) return "-1/this % 2^DB"; useful for Mont. reduction
+// justification:
+//         xy == 1 (mod m)
+//         xy =  1+km
+//   xy(2-xy) = (1+km)(1-km)
+// x[y(2-xy)] = 1-k^2m^2
+// x[y(2-xy)] == 1 (mod m^2)
+// if y is 1/x mod m, then y(2-xy) is 1/x mod m^2
+// should reduce x and y(2-xy) by m^2 at each step to keep size bounded.
+// JS multiply "overflows" differently from C/C++, so care is needed here.
 function bnpInvDigit() {
   if(this.t < 1) return 0;
   var x = this.data[0];
   if((x&1) == 0) return 0;
-  var y = x&3;
-  y = (y*(2-(x&0xf)*y))&0xf;
-  y = (y*(2-(x&0xff)*y))&0xff;
-  y = (y*(2-(((x&0xffff)*y)&0xffff)))&0xffff;
-  y = (y*(2-x*y%this.DV))%this.DV;
+  var y = x&3; // y == 1/x mod 2^2
+  y = (y*(2-(x&0xf)*y))&0xf; // y == 1/x mod 2^4
+  y = (y*(2-(x&0xff)*y))&0xff; // y == 1/x mod 2^8
+  y = (y*(2-(((x&0xffff)*y)&0xffff)))&0xffff; // y == 1/x mod 2^16
+  // last step - calculate inverse mod DV directly;
+  // assumes 16 < DB <= 32 and assumes ability to handle 48-bit ints
+  y = (y*(2-x*y%this.DV))%this.DV; // y == 1/x mod 2^dbits
+  // we really want the negative inverse, and -DV < y < DV
   return (y>0)?this.DV-y:-y;
 }
+// Montgomery reduction
+/** @constructor */
 function Montgomery(m) {
   this.m = m;
   this.mp = m.invDigit();
@@ -1178,6 +1442,7 @@ function Montgomery(m) {
   this.um = (1<<(m.DB-15))-1;
   this.mt2 = 2*m.t;
 }
+// xR mod m
 function montConvert(x) {
   var r = nbi();
   x.abs().dlShiftTo(this.m.t,r);
@@ -1185,34 +1450,43 @@ function montConvert(x) {
   if(x.s < 0 && r.compareTo(BigInteger.ZERO) > 0) this.m.subTo(r,r);
   return r;
 }
+// x/R mod m
 function montRevert(x) {
   var r = nbi();
   x.copyTo(r);
   this.reduce(r);
   return r;
 }
+// x = x/R mod m (HAC 14.32)
 function montReduce(x) {
-  while(x.t <= this.mt2)
+  while(x.t <= this.mt2) // pad x so am has enough room later
     x.data[x.t++] = 0;
   for(var i = 0; i < this.m.t; ++i) {
+    // faster way of calculating u0 = x.data[i]*mp mod DV
     var j = x.data[i]&0x7fff;
     var u0 = (j*this.mpl+(((j*this.mph+(x.data[i]>>15)*this.mpl)&this.um)<<15))&x.DM;
+    // use am to combine the multiply-shift-add into one call
     j = i+this.m.t;
     x.data[j] += this.m.am(0,u0,x,i,0,this.m.t);
+    // propagate carry
     while(x.data[j] >= x.DV) { x.data[j] -= x.DV; x.data[++j]++; }
   }
   x.clamp();
   x.drShiftTo(this.m.t,x);
   if(x.compareTo(this.m) >= 0) x.subTo(this.m,x);
 }
+// r = "x^2/R mod m"; x != r
 function montSqrTo(x,r) { x.squareTo(r); this.reduce(r); }
+// r = "xy/R mod m"; x,y != r
 function montMulTo(x,y,r) { x.multiplyTo(y,r); this.reduce(r); }
 Montgomery.prototype.convert = montConvert;
 Montgomery.prototype.revert = montRevert;
 Montgomery.prototype.reduce = montReduce;
 Montgomery.prototype.mulTo = montMulTo;
 Montgomery.prototype.sqrTo = montSqrTo;
+// (protected) true iff this is even
 function bnpIsEven() { return ((this.t>0)?(this.data[0]&1):this.s) == 0; }
+// (protected) this^e, e < 2^32, doing sqr and mul with "r" (HAC 14.79)
 function bnpExp(e,z) {
   if(e > 0xffffffff || e < 1) return BigInteger.ONE;
   var r = nbi(), r2 = nbi(), g = z.convert(this), i = nbits(e)-1;
@@ -1224,11 +1498,13 @@ function bnpExp(e,z) {
   }
   return z.revert(r);
 }
+// (public) this^e % m, 0 <= e < 2^32
 function bnModPowInt(e,m) {
   var z;
   if(e < 256 || m.isEven()) z = new Classic(m); else z = new Montgomery(m);
   return this.exp(e,z);
 }
+// protected
 BigInteger.prototype.copyTo = bnpCopyTo;
 BigInteger.prototype.fromInt = bnpFromInt;
 BigInteger.prototype.fromString = bnpFromString;
@@ -1244,6 +1520,7 @@ BigInteger.prototype.divRemTo = bnpDivRemTo;
 BigInteger.prototype.invDigit = bnpInvDigit;
 BigInteger.prototype.isEven = bnpIsEven;
 BigInteger.prototype.exp = bnpExp;
+// public
 BigInteger.prototype.toString = bnToString;
 BigInteger.prototype.negate = bnNegate;
 BigInteger.prototype.abs = bnAbs;
@@ -1251,9 +1528,18 @@ BigInteger.prototype.compareTo = bnCompareTo;
 BigInteger.prototype.bitLength = bnBitLength;
 BigInteger.prototype.mod = bnMod;
 BigInteger.prototype.modPowInt = bnModPowInt;
+// "constants"
 BigInteger.ZERO = nbv(0);
 BigInteger.ONE = nbv(1);
+// Copyright (c) 2005-2009  Tom Wu
+// All Rights Reserved.
+// See "LICENSE" for details.
+// Extended JavaScript BN functions, required for RSA private ops.
+// Version 1.1: new BigInteger("0", 10) returns "proper" zero
+// Version 1.2: square() API, isProbablePrime fix
+// (public)
 function bnClone() { var r = nbi(); this.copyTo(r); return r; }
+// (public) return value as integer
 function bnIntValue() {
   if(this.s < 0) {
     if(this.t == 1) return this.data[0]-this.DV;
@@ -1261,16 +1547,22 @@ function bnIntValue() {
   }
   else if(this.t == 1) return this.data[0];
   else if(this.t == 0) return 0;
+  // assumes 16 < DB < 32
   return ((this.data[1]&((1<<(32-this.DB))-1))<<this.DB)|this.data[0];
 }
+// (public) return value as byte
 function bnByteValue() { return (this.t==0)?this.s:(this.data[0]<<24)>>24; }
+// (public) return value as short (assumes DB>=16)
 function bnShortValue() { return (this.t==0)?this.s:(this.data[0]<<16)>>16; }
+// (protected) return x s.t. r^x < DV
 function bnpChunkSize(r) { return Math.floor(Math.LN2*this.DB/Math.log(r)); }
+// (public) 0 if this == 0, 1 if this > 0
 function bnSigNum() {
   if(this.s < 0) return -1;
   else if(this.t <= 0 || (this.t == 1 && this.data[0] <= 0)) return 0;
   else return 1;
 }
+// (protected) convert to radix string
 function bnpToRadix(b) {
   if(b == null) b = 10;
   if(this.signum() == 0 || b < 2 || b > 36) return "0";
@@ -1284,6 +1576,7 @@ function bnpToRadix(b) {
   }
   return z.intValue().toString(b) + r;
 }
+// (protected) convert from radix string
 function bnpFromRadix(s,b) {
   this.fromInt(0);
   if(b == null) b = 10;
@@ -1309,14 +1602,16 @@ function bnpFromRadix(s,b) {
   }
   if(mi) BigInteger.ZERO.subTo(this,this);
 }
+// (protected) alternate constructor
 function bnpFromNumber(a,b,c) {
   if("number" == typeof b) {
+    // new BigInteger(int,int,RNG)
     if(a < 2) this.fromInt(1);
     else {
       this.fromNumber(a,c);
-      if(!this.testBit(a-1))
+      if(!this.testBit(a-1)) // force MSB set
         this.bitwiseTo(BigInteger.ONE.shiftLeft(a-1),op_or,this);
-      if(this.isEven()) this.dAddOffset(1,0);
+      if(this.isEven()) this.dAddOffset(1,0); // force odd
       while(!this.isProbablePrime(b)) {
         this.dAddOffset(2,0);
         if(this.bitLength() > a) this.subTo(BigInteger.ONE.shiftLeft(a-1),this);
@@ -1324,6 +1619,7 @@ function bnpFromNumber(a,b,c) {
     }
   }
   else {
+    // new BigInteger(int,RNG)
     var x = new Array(), t = a&7;
     x.length = (a>>3)+1;
     b.nextBytes(x);
@@ -1331,6 +1627,7 @@ function bnpFromNumber(a,b,c) {
     this.fromString(x,256);
   }
 }
+// (public) convert to bigendian byte array
 function bnToByteArray() {
   var i = this.t, r = new Array();
   r[0] = this.s;
@@ -1357,6 +1654,7 @@ function bnToByteArray() {
 function bnEquals(a) { return(this.compareTo(a)==0); }
 function bnMin(a) { return(this.compareTo(a)<0)?this:a; }
 function bnMax(a) { return(this.compareTo(a)>0)?this:a; }
+// (protected) r = this op a (bitwise)
 function bnpBitwiseTo(a,op,r) {
   var i, f, m = Math.min(a.t,this.t);
   for(i = 0; i < m; ++i) r.data[i] = op(this.data[i],a.data[i]);
@@ -1373,14 +1671,19 @@ function bnpBitwiseTo(a,op,r) {
   r.s = op(this.s,a.s);
   r.clamp();
 }
+// (public) this & a
 function op_and(x,y) { return x&y; }
 function bnAnd(a) { var r = nbi(); this.bitwiseTo(a,op_and,r); return r; }
+// (public) this | a
 function op_or(x,y) { return x|y; }
 function bnOr(a) { var r = nbi(); this.bitwiseTo(a,op_or,r); return r; }
+// (public) this ^ a
 function op_xor(x,y) { return x^y; }
 function bnXor(a) { var r = nbi(); this.bitwiseTo(a,op_xor,r); return r; }
+// (public) this & ~a
 function op_andnot(x,y) { return x&~y; }
 function bnAndNot(a) { var r = nbi(); this.bitwiseTo(a,op_andnot,r); return r; }
+// (public) ~this
 function bnNot() {
   var r = nbi();
   for(var i = 0; i < this.t; ++i) r.data[i] = this.DM&~this.data[i];
@@ -1388,16 +1691,19 @@ function bnNot() {
   r.s = ~this.s;
   return r;
 }
+// (public) this << n
 function bnShiftLeft(n) {
   var r = nbi();
   if(n < 0) this.rShiftTo(-n,r); else this.lShiftTo(n,r);
   return r;
 }
+// (public) this >> n
 function bnShiftRight(n) {
   var r = nbi();
   if(n < 0) this.lShiftTo(-n,r); else this.rShiftTo(n,r);
   return r;
 }
+// return index of lowest 1-bit in x, x < 2^31
 function lbit(x) {
   if(x == 0) return -1;
   var r = 0;
@@ -1408,35 +1714,44 @@ function lbit(x) {
   if((x&1) == 0) ++r;
   return r;
 }
+// (public) returns index of lowest 1-bit (or -1 if none)
 function bnGetLowestSetBit() {
   for(var i = 0; i < this.t; ++i)
     if(this.data[i] != 0) return i*this.DB+lbit(this.data[i]);
   if(this.s < 0) return this.t*this.DB;
   return -1;
 }
+// return number of 1 bits in x
 function cbit(x) {
   var r = 0;
   while(x != 0) { x &= x-1; ++r; }
   return r;
 }
+// (public) return number of set bits
 function bnBitCount() {
   var r = 0, x = this.s&this.DM;
   for(var i = 0; i < this.t; ++i) r += cbit(this.data[i]^x);
   return r;
 }
+// (public) true iff nth bit is set
 function bnTestBit(n) {
   var j = Math.floor(n/this.DB);
   if(j >= this.t) return(this.s!=0);
   return((this.data[j]&(1<<(n%this.DB)))!=0);
 }
+// (protected) this op (1<<n)
 function bnpChangeBit(n,op) {
   var r = BigInteger.ONE.shiftLeft(n);
   this.bitwiseTo(r,op,r);
   return r;
 }
+// (public) this | (1<<n)
 function bnSetBit(n) { return this.changeBit(n,op_or); }
+// (public) this & ~(1<<n)
 function bnClearBit(n) { return this.changeBit(n,op_andnot); }
+// (public) this ^ (1<<n)
 function bnFlipBit(n) { return this.changeBit(n,op_xor); }
+// (protected) r = this + a
 function bnpAddTo(a,r) {
   var i = 0, c = 0, m = Math.min(a.t,this.t);
   while(i < m) {
@@ -1468,22 +1783,31 @@ function bnpAddTo(a,r) {
   r.t = i;
   r.clamp();
 }
+// (public) this + a
 function bnAdd(a) { var r = nbi(); this.addTo(a,r); return r; }
+// (public) this - a
 function bnSubtract(a) { var r = nbi(); this.subTo(a,r); return r; }
+// (public) this * a
 function bnMultiply(a) { var r = nbi(); this.multiplyTo(a,r); return r; }
+// (public) this^2
 function bnSquare() { var r = nbi(); this.squareTo(r); return r; }
+// (public) this / a
 function bnDivide(a) { var r = nbi(); this.divRemTo(a,r,null); return r; }
+// (public) this % a
 function bnRemainder(a) { var r = nbi(); this.divRemTo(a,null,r); return r; }
+// (public) [this/a,this%a]
 function bnDivideAndRemainder(a) {
   var q = nbi(), r = nbi();
   this.divRemTo(a,q,r);
   return new Array(q,r);
 }
+// (protected) this *= n, this >= 0, 1 < n < DV
 function bnpDMultiply(n) {
   this.data[this.t] = this.am(0,n-1,this,0,0,this.t);
   ++this.t;
   this.clamp();
 }
+// (protected) this += n << w words, this >= 0
 function bnpDAddOffset(n,w) {
   if(n == 0) return;
   while(this.t <= w) this.data[this.t++] = 0;
@@ -1494,6 +1818,8 @@ function bnpDAddOffset(n,w) {
     ++this.data[w];
   }
 }
+// A "null" reducer
+/** @constructor */
 function NullExp() {}
 function nNop(x) { return x; }
 function nMulTo(x,y,r) { x.multiplyTo(y,r); }
@@ -1502,10 +1828,13 @@ NullExp.prototype.convert = nNop;
 NullExp.prototype.revert = nNop;
 NullExp.prototype.mulTo = nMulTo;
 NullExp.prototype.sqrTo = nSqrTo;
+// (public) this^e
 function bnPow(e) { return this.exp(e,new NullExp()); }
+// (protected) r = lower n words of "this * a", a.t <= n
+// "this" should be the larger one if appropriate.
 function bnpMultiplyLowerTo(a,n,r) {
   var i = Math.min(this.t+a.t,n);
-  r.s = 0;
+  r.s = 0; // assumes a,this >= 0
   r.t = i;
   while(i > 0) r.data[--i] = 0;
   var j;
@@ -1513,17 +1842,22 @@ function bnpMultiplyLowerTo(a,n,r) {
   for(j = Math.min(a.t,n); i < j; ++i) this.am(0,a.data[i],r,i,0,n-i);
   r.clamp();
 }
+// (protected) r = "this * a" without lower n words, n > 0
+// "this" should be the larger one if appropriate.
 function bnpMultiplyUpperTo(a,n,r) {
   --n;
   var i = r.t = this.t+a.t-n;
-  r.s = 0;
+  r.s = 0; // assumes a,this >= 0
   while(--i >= 0) r.data[i] = 0;
   for(i = Math.max(n-this.t,0); i < a.t; ++i)
     r.data[this.t+i-n] = this.am(n-i,a.data[i],r,0,0,this.t+i-n);
   r.clamp();
   r.drShiftTo(1,r);
 }
+// Barrett modular reduction
+/** @constructor */
 function Barrett(m) {
+  // setup Barrett
   this.r2 = nbi();
   this.q3 = nbi();
   BigInteger.ONE.dlShiftTo(2*m.t,this.r2);
@@ -1536,6 +1870,7 @@ function barrettConvert(x) {
   else { var r = nbi(); x.copyTo(r); this.reduce(r); return r; }
 }
 function barrettRevert(x) { return x; }
+// x = x mod m (HAC 14.42)
 function barrettReduce(x) {
   x.drShiftTo(this.m.t-1,this.r2);
   if(x.t > this.m.t+1) { x.t = this.m.t+1; x.clamp(); }
@@ -1545,13 +1880,16 @@ function barrettReduce(x) {
   x.subTo(this.r2,x);
   while(x.compareTo(this.m) >= 0) x.subTo(this.m,x);
 }
+// r = x^2 mod m; x != r
 function barrettSqrTo(x,r) { x.squareTo(r); this.reduce(r); }
+// r = x*y mod m; x,y != r
 function barrettMulTo(x,y,r) { x.multiplyTo(y,r); this.reduce(r); }
 Barrett.prototype.convert = barrettConvert;
 Barrett.prototype.revert = barrettRevert;
 Barrett.prototype.reduce = barrettReduce;
 Barrett.prototype.mulTo = barrettMulTo;
 Barrett.prototype.sqrTo = barrettSqrTo;
+// (public) this^e % m (HAC 14.85)
 function bnModPow(e,m) {
   var i = e.bitLength(), k, r = nbv(1), z;
   if(i <= 0) return r;
@@ -1566,6 +1904,7 @@ function bnModPow(e,m) {
     z = new Barrett(m);
   else
     z = new Montgomery(m);
+  // precomputation
   var g = new Array(), n = 3, k1 = k-1, km = (1<<k)-1;
   g[1] = z.convert(this);
   if(k > 1) {
@@ -1588,7 +1927,7 @@ function bnModPow(e,m) {
     n = k;
     while((w&1) == 0) { w >>= 1; --n; }
     if((i -= n) < 0) { i += this.DB; --j; }
-    if(is1) {
+    if(is1) { // ret == 1, don't bother squaring or multiplying it
       g[w].copyTo(r);
       is1 = false;
     }
@@ -1604,6 +1943,7 @@ function bnModPow(e,m) {
   }
   return z.revert(r);
 }
+// (public) gcd(this,a) (HAC 14.54)
 function bnGCD(a) {
   var x = (this.s<0)?this.negate():this.clone();
   var y = (a.s<0)?a.negate():a.clone();
@@ -1630,6 +1970,7 @@ function bnGCD(a) {
   if(g > 0) y.lShiftTo(g,y);
   return y;
 }
+// (protected) this % n, n < 2^26
 function bnpModInt(n) {
   if(n <= 0) return 0;
   var d = this.DV%n, r = (this.s<0)?n-1:0;
@@ -1638,6 +1979,7 @@ function bnpModInt(n) {
     else for(var i = this.t-1; i >= 0; --i) r = (d*r+this.data[i])%n;
   return r;
 }
+// (public) 1/this % m (HAC 14.61)
 function bnModInverse(m) {
   var ac = m.isEven();
   if((this.isEven() && ac) || m.signum() == 0) return BigInteger.ZERO;
@@ -1680,6 +2022,7 @@ function bnModInverse(m) {
 }
 var lowprimes = [2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97,101,103,107,109,113,127,131,137,139,149,151,157,163,167,173,179,181,191,193,197,199,211,223,227,229,233,239,241,251,257,263,269,271,277,281,283,293,307,311,313,317,331,337,347,349,353,359,367,373,379,383,389,397,401,409,419,421,431,433,439,443,449,457,461,463,467,479,487,491,499,503,509,521,523,541,547,557,563,569,571,577,587,593,599,601,607,613,617,619,631,641,643,647,653,659,661,673,677,683,691,701,709,719,727,733,739,743,751,757,761,769,773,787,797,809,811,821,823,827,829,839,853,857,859,863,877,881,883,887,907,911,919,929,937,941,947,953,967,971,977,983,991,997];
 var lplim = (1<<26)/lowprimes[lowprimes.length-1];
+// (public) test primality with certainty >= 1-.5^t
 function bnIsProbablePrime(t) {
   var i, x = this.abs();
   if(x.t == 1 && x.data[0] <= lowprimes[lowprimes.length-1]) {
@@ -1697,6 +2040,7 @@ function bnIsProbablePrime(t) {
   }
   return x.millerRabin(t);
 }
+// (protected) true if probably prime (HAC 4.24, Miller-Rabin)
 function bnpMillerRabin(t) {
   var n1 = this.subtract(BigInteger.ONE);
   var k = n1.getLowestSetBit();
@@ -1706,6 +2050,7 @@ function bnpMillerRabin(t) {
   if(t > lowprimes.length) t = lowprimes.length;
   var a = nbi();
   for(var i = 0; i < t; ++i) {
+    // Pick bases at random, instead of starting at 2
     a.fromInt(lowprimes[Math.floor(Math.random()*lowprimes.length)]);
     var y = a.modPow(r,this);
     if(y.compareTo(BigInteger.ONE) != 0 && y.compareTo(n1) != 0) {
@@ -1719,6 +2064,7 @@ function bnpMillerRabin(t) {
   }
   return true;
 }
+// protected
 BigInteger.prototype.chunkSize = bnpChunkSize;
 BigInteger.prototype.toRadix = bnpToRadix;
 BigInteger.prototype.fromRadix = bnpFromRadix;
@@ -1732,6 +2078,7 @@ BigInteger.prototype.multiplyLowerTo = bnpMultiplyLowerTo;
 BigInteger.prototype.multiplyUpperTo = bnpMultiplyUpperTo;
 BigInteger.prototype.modInt = bnpModInt;
 BigInteger.prototype.millerRabin = bnpMillerRabin;
+// public
 BigInteger.prototype.clone = bnClone;
 BigInteger.prototype.intValue = bnIntValue;
 BigInteger.prototype.byteValue = bnByteValue;
@@ -1765,7 +2112,16 @@ BigInteger.prototype.modInverse = bnModInverse;
 BigInteger.prototype.pow = bnPow;
 BigInteger.prototype.gcd = bnGCD;
 BigInteger.prototype.isProbablePrime = bnIsProbablePrime;
+// JSBN-specific extension
 BigInteger.prototype.square = bnSquare;
+// BigInteger interfaces not implemented in jsbn:
+// BigInteger(int signum, byte[] magnitude)
+// double doubleValue()
+// float floatValue()
+// int hashCode()
+// long longValue()
+// static BigInteger valueOf(long val)
+// customization for GHCJS
 BigInteger.prototype.am = am3;
 dbits = 28;
 DV = (1<<dbits);
@@ -1779,532 +2135,234 @@ BigInteger.prototype.F2 = 2*dbits-BI_FP;
 BigInteger.nbv = nbv;
 BigInteger.nbi = nbi;
 return BigInteger;
-}();
+})();
+// fixme prefix this
 var h$nbv = BigInteger.nbv;
 var h$nbi = BigInteger.nbi;
-if(typeof exports !== 'undefined') {
-  if(typeof WeakMap === 'undefined' && typeof global !== 'undefined') {
-    global.WeakMap = exports.WeakMap;
-  }
-}
-var COMPILED = false;
-var goog = goog || {};
-goog.global = this;
-goog.DEBUG = true;
-goog.LOCALE = 'en';
-goog.provide = function(name) {
-  if (!COMPILED) {
-    if (goog.isProvided_(name)) {
-      throw Error('Namespace "' + name + '" already declared.');
-    }
-    delete goog.implicitNamespaces_[name];
-    var namespace = name;
-    while ((namespace = namespace.substring(0, namespace.lastIndexOf('.')))) {
-      if (goog.getObjectByName(namespace)) {
-        break;
-      }
-      goog.implicitNamespaces_[namespace] = true;
-    }
-  }
-  goog.exportPath_(name);
-};
-goog.setTestOnly = function(opt_message) {
-  if (COMPILED && !goog.DEBUG) {
-    opt_message = opt_message || '';
-    throw Error('Importing test-only code into non-debug environment' +
-                opt_message ? ': ' + opt_message : '.');
-  }
-};
-if (!COMPILED) {
-  goog.isProvided_ = function(name) {
-    return !goog.implicitNamespaces_[name] && !!goog.getObjectByName(name);
-  };
-  goog.implicitNamespaces_ = {};
-}
-goog.exportPath_ = function(name, opt_object, opt_objectToExportTo) {
-  var parts = name.split('.');
-  var cur = opt_objectToExportTo || goog.global;
-  if (!(parts[0] in cur) && cur.execScript) {
-    cur.execScript('var ' + parts[0]);
-  }
-  for (var part; parts.length && (part = parts.shift());) {
-    if (!parts.length && goog.isDef(opt_object)) {
-      cur[part] = opt_object;
-    } else if (cur[part]) {
-      cur = cur[part];
-    } else {
-      cur = cur[part] = {};
-    }
-  }
-};
-goog.getObjectByName = function(name, opt_obj) {
-  var parts = name.split('.');
-  var cur = opt_obj || goog.global;
-  for (var part; part = parts.shift(); ) {
-    if (goog.isDefAndNotNull(cur[part])) {
-      cur = cur[part];
-    } else {
-      return null;
-    }
-  }
-  return cur;
-};
-goog.globalize = function(obj, opt_global) {
-  var global = opt_global || goog.global;
-  for (var x in obj) {
-    global[x] = obj[x];
-  }
-};
-goog.addDependency = function(relPath, provides, requires) {
-  if (!COMPILED) {
-    var provide, require;
-    var path = relPath.replace(/\\/g, '/');
-    var deps = goog.dependencies_;
-    for (var i = 0; provide = provides[i]; i++) {
-      deps.nameToPath[provide] = path;
-      if (!(path in deps.pathToNames)) {
-        deps.pathToNames[path] = {};
-      }
-      deps.pathToNames[path][provide] = true;
-    }
-    for (var j = 0; require = requires[j]; j++) {
-      if (!(path in deps.requires)) {
-        deps.requires[path] = {};
-      }
-      deps.requires[path][require] = true;
-    }
-  }
-};
-goog.ENABLE_DEBUG_LOADER = true;
-goog.require = function(name) {
-  if (!COMPILED) {
-    if (goog.isProvided_(name)) {
-      return;
-    }
-    if (goog.ENABLE_DEBUG_LOADER) {
-      var path = goog.getPathFromDeps_(name);
-      if (path) {
-        goog.included_[path] = true;
-        goog.writeScripts_();
+(function (global, undefined) {
+    "use strict";
+    if (global.setImmediate) {
         return;
-      }
     }
-    var errorMessage = 'goog.require could not find: ' + name;
-    if (goog.global.console) {
-      goog.global.console['error'](errorMessage);
+    var nextHandle = 1; // Spec says greater than zero
+    var tasksByHandle = {};
+    var currentlyRunningATask = false;
+    var doc = global.document;
+    var setImmediate;
+    function addFromSetImmediateArguments(args) {
+        tasksByHandle[nextHandle] = partiallyApplied.apply(undefined, args);
+        return nextHandle++;
     }
-      throw Error(errorMessage);
-  }
-};
-goog.basePath = '';
-goog.global.CLOSURE_BASE_PATH;
-goog.global.CLOSURE_NO_DEPS;
-goog.global.CLOSURE_IMPORT_SCRIPT;
-goog.nullFunction = function() {};
-goog.identityFunction = function(opt_returnValue, var_args) {
-  return opt_returnValue;
-};
-goog.abstractMethod = function() {
-  throw Error('unimplemented abstract method');
-};
-goog.addSingletonGetter = function(ctor) {
-  ctor.getInstance = function() {
-    if (ctor.instance_) {
-      return ctor.instance_;
-    }
-    if (goog.DEBUG) {
-      goog.instantiatedSingletons_[goog.instantiatedSingletons_.length] = ctor;
-    }
-    return ctor.instance_ = new ctor;
-  };
-};
-goog.instantiatedSingletons_ = [];
-if (!COMPILED && goog.ENABLE_DEBUG_LOADER) {
-  goog.included_ = {};
-  goog.dependencies_ = {
-    pathToNames: {},
-    nameToPath: {},
-    requires: {},
-    visited: {},
-    written: {}
-  };
-  goog.inHtmlDocument_ = function() {
-    var doc = goog.global.document;
-    return typeof doc != 'undefined' &&
-           'write' in doc;
-  };
-  goog.findBasePath_ = function() {
-    if (goog.global.CLOSURE_BASE_PATH) {
-      goog.basePath = goog.global.CLOSURE_BASE_PATH;
-      return;
-    } else if (!goog.inHtmlDocument_()) {
-      return;
-    }
-    var doc = goog.global.document;
-    var scripts = doc.getElementsByTagName('script');
-    for (var i = scripts.length - 1; i >= 0; --i) {
-      var src = scripts[i].src;
-      var qmark = src.lastIndexOf('?');
-      var l = qmark == -1 ? src.length : qmark;
-      if (src.substr(l - 7, 7) == 'base.js') {
-        goog.basePath = src.substr(0, l - 7);
-        return;
-      }
-    }
-  };
-  goog.importScript_ = function(src) {
-    var importScript = goog.global.CLOSURE_IMPORT_SCRIPT ||
-        goog.writeScriptTag_;
-    if (!goog.dependencies_.written[src] && importScript(src)) {
-      goog.dependencies_.written[src] = true;
-    }
-  };
-  goog.writeScriptTag_ = function(src) {
-    if (goog.inHtmlDocument_()) {
-      var doc = goog.global.document;
-      if (doc.readyState == 'complete') {
-        var isDeps = /\bdeps.js$/.test(src);
-        if (isDeps) {
-          return false;
-        } else {
-          throw Error('Cannot write "' + src + '" after document load');
-        }
-      }
-      doc.write(
-          '<script type="text/javascript" src="' + src + '"></' + 'script>');
-      return true;
-    } else {
-      return false;
-    }
-  };
-  goog.writeScripts_ = function() {
-    var scripts = [];
-    var seenScript = {};
-    var deps = goog.dependencies_;
-    function visitNode(path) {
-      if (path in deps.written) {
-        return;
-      }
-      if (path in deps.visited) {
-        if (!(path in seenScript)) {
-          seenScript[path] = true;
-          scripts.push(path);
-        }
-        return;
-      }
-      deps.visited[path] = true;
-      if (path in deps.requires) {
-        for (var requireName in deps.requires[path]) {
-          if (!goog.isProvided_(requireName)) {
-            if (requireName in deps.nameToPath) {
-              visitNode(deps.nameToPath[requireName]);
+    // This function accepts the same arguments as setImmediate, but
+    // returns a function that requires no arguments.
+    function partiallyApplied(handler) {
+        var args = [].slice.call(arguments, 1);
+        return function() {
+            if (typeof handler === "function") {
+                handler.apply(undefined, args);
             } else {
-              throw Error('Undefined nameToPath for ' + requireName);
+                (new Function("" + handler))();
             }
-          }
+        };
+    }
+    function runIfPresent(handle) {
+        // From the spec: "Wait until any invocations of this algorithm started before this one have completed."
+        // So if we're currently running a task, we'll need to delay this invocation.
+        if (currentlyRunningATask) {
+            // Delay by doing a setTimeout. setImmediate was tried instead, but in Firefox 7 it generated a
+            // "too much recursion" error.
+            setTimeout(partiallyApplied(runIfPresent, handle), 0);
+        } else {
+            var task = tasksByHandle[handle];
+            if (task) {
+                currentlyRunningATask = true;
+                try {
+                    task();
+                } finally {
+                    clearImmediate(handle);
+                    currentlyRunningATask = false;
+                }
+            }
         }
-      }
-      if (!(path in seenScript)) {
-        seenScript[path] = true;
-        scripts.push(path);
-      }
     }
-    for (var path in goog.included_) {
-      if (!deps.written[path]) {
-        visitNode(path);
-      }
+    function clearImmediate(handle) {
+        delete tasksByHandle[handle];
     }
-    for (var i = 0; i < scripts.length; i++) {
-      if (scripts[i]) {
-        goog.importScript_(goog.basePath + scripts[i]);
-      } else {
-        throw Error('Undefined script input');
-      }
+    function installNextTickImplementation() {
+        setImmediate = function() {
+            var handle = addFromSetImmediateArguments(arguments);
+            process.nextTick(partiallyApplied(runIfPresent, handle));
+            return handle;
+        };
     }
-  };
-  goog.getPathFromDeps_ = function(rule) {
-    if (rule in goog.dependencies_.nameToPath) {
-      return goog.dependencies_.nameToPath[rule];
+    function canUsePostMessage() {
+        // The test against `importScripts` prevents this implementation from being installed inside a web worker,
+        // where `global.postMessage` means something completely different and can't be used for this purpose.
+        if (global.postMessage && !global.importScripts) {
+            var postMessageIsAsynchronous = true;
+            var oldOnMessage = global.onmessage;
+            global.onmessage = function() {
+                postMessageIsAsynchronous = false;
+            };
+            global.postMessage("", "*");
+            global.onmessage = oldOnMessage;
+            return postMessageIsAsynchronous;
+        }
+    }
+    function installPostMessageImplementation() {
+        // Installs an event handler on `global` for the `message` event: see
+        // * https://developer.mozilla.org/en/DOM/window.postMessage
+        // * http://www.whatwg.org/specs/web-apps/current-work/multipage/comms.html#crossDocumentMessages
+        var messagePrefix = "setImmediate$" + Math.random() + "$";
+        var onGlobalMessage = function(event) {
+            if (event.source === global &&
+                typeof event.data === "string" &&
+                event.data.indexOf(messagePrefix) === 0) {
+                runIfPresent(+event.data.slice(messagePrefix.length));
+            }
+        };
+        if (global.addEventListener) {
+            global.addEventListener("message", onGlobalMessage, false);
+        } else {
+            global.attachEvent("onmessage", onGlobalMessage);
+        }
+        setImmediate = function() {
+            var handle = addFromSetImmediateArguments(arguments);
+            global.postMessage(messagePrefix + handle, "*");
+            return handle;
+        };
+    }
+    function installMessageChannelImplementation() {
+        var channel = new MessageChannel();
+        channel.port1.onmessage = function(event) {
+            var handle = event.data;
+            runIfPresent(handle);
+        };
+        setImmediate = function() {
+            var handle = addFromSetImmediateArguments(arguments);
+            channel.port2.postMessage(handle);
+            return handle;
+        };
+    }
+    function installReadyStateChangeImplementation() {
+        var html = doc.documentElement;
+        setImmediate = function() {
+            var handle = addFromSetImmediateArguments(arguments);
+            // Create a <script> element; its readystatechange event will be fired asynchronously once it is inserted
+            // into the document. Do so, thus queuing up the task. Remember to clean up once it's been called.
+            var script = doc.createElement("script");
+            script.onreadystatechange = function () {
+                runIfPresent(handle);
+                script.onreadystatechange = null;
+                html.removeChild(script);
+                script = null;
+            };
+            html.appendChild(script);
+            return handle;
+        };
+    }
+    function installSetTimeoutImplementation() {
+        // jsshell doesn't even have setTimeout
+        if(typeof setTimeout === 'undefined') setImmediate = function() { return null; };
+        else
+          setImmediate = function() {
+            var handle = addFromSetImmediateArguments(arguments);
+            setTimeout(partiallyApplied(runIfPresent, handle), 0);
+            return handle;
+        };
+    }
+    // If supported, we should attach to the prototype of global, since that is where setTimeout et al. live.
+    var attachTo = Object.getPrototypeOf && Object.getPrototypeOf(global);
+    attachTo = attachTo && attachTo.setTimeout ? attachTo : global;
+    // Don't get fooled by e.g. browserify environments.
+    if ({}.toString.call(global.process) === "[object process]") {
+        // For Node.js before 0.9
+        installNextTickImplementation();
+    } else
+       if (canUsePostMessage()) {
+        // For non-IE10 modern browsers
+        installPostMessageImplementation();
+    } else if (global.MessageChannel) {
+        // For web workers, where supported
+        installMessageChannelImplementation();
+    } else if (doc && "onreadystatechange" in doc.createElement("script")) {
+        // For IE 6–8
+        installReadyStateChangeImplementation();
     } else {
-      return null;
+        // For older browsers
+        installSetTimeoutImplementation();
     }
-  };
-  goog.findBasePath_();
-  if (!goog.global.CLOSURE_NO_DEPS) {
-    goog.importScript_(goog.basePath + 'deps.js');
-  }
-}
-goog.typeOf = function(value) {
-  var s = typeof value;
-  if (s == 'object') {
-    if (value) {
-      if (value instanceof Array) {
-        return 'array';
-      } else if (value instanceof Object) {
-        return s;
-      }
-      var className = Object.prototype.toString.call(
-                                (value));
-      if (className == '[object Window]') {
-        return 'object';
-      }
-      if ((className == '[object Array]' ||
-           typeof value.length == 'number' &&
-           typeof value.splice != 'undefined' &&
-           typeof value.propertyIsEnumerable != 'undefined' &&
-           !value.propertyIsEnumerable('splice')
-          )) {
-        return 'array';
-      }
-      if ((className == '[object Function]' ||
-          typeof value.call != 'undefined' &&
-          typeof value.propertyIsEnumerable != 'undefined' &&
-          !value.propertyIsEnumerable('call'))) {
-        return 'function';
-      }
-    } else {
-      return 'null';
-    }
-  } else if (s == 'function' && typeof value.call == 'undefined') {
-    return 'object';
-  }
-  return s;
-};
-goog.isDef = function(val) {
-  return val !== undefined;
-};
-goog.isNull = function(val) {
-  return val === null;
-};
-goog.isDefAndNotNull = function(val) {
-  return val != null;
-};
-goog.isArray = function(val) {
-  return goog.typeOf(val) == 'array';
-};
-goog.isArrayLike = function(val) {
-  var type = goog.typeOf(val);
-  return type == 'array' || type == 'object' && typeof val.length == 'number';
-};
-goog.isDateLike = function(val) {
-  return goog.isObject(val) && typeof val.getFullYear == 'function';
-};
-goog.isString = function(val) {
-  return typeof val == 'string';
-};
-goog.isBoolean = function(val) {
-  return typeof val == 'boolean';
-};
-goog.isNumber = function(val) {
-  return typeof val == 'number';
-};
-goog.isFunction = function(val) {
-  return goog.typeOf(val) == 'function';
-};
-goog.isObject = function(val) {
-  var type = typeof val;
-  return type == 'object' && val != null || type == 'function';
-};
-goog.getUid = function(obj) {
-  return obj[goog.UID_PROPERTY_] ||
-      (obj[goog.UID_PROPERTY_] = ++goog.uidCounter_);
-};
-goog.removeUid = function(obj) {
-  if ('removeAttribute' in obj) {
-    obj.removeAttribute(goog.UID_PROPERTY_);
-  }
-  try {
-    delete obj[goog.UID_PROPERTY_];
-  } catch (ex) {
-  }
-};
-goog.UID_PROPERTY_ = 'closure_uid_' +
-    Math.floor(Math.random() * 2147483648).toString(36);
-goog.uidCounter_ = 0;
-goog.getHashCode = goog.getUid;
-goog.removeHashCode = goog.removeUid;
-goog.cloneObject = function(obj) {
-  var type = goog.typeOf(obj);
-  if (type == 'object' || type == 'array') {
-    if (obj.clone) {
-      return obj.clone();
-    }
-    var clone = type == 'array' ? [] : {};
-    for (var key in obj) {
-      clone[key] = goog.cloneObject(obj[key]);
-    }
-    return clone;
-  }
-  return obj;
-};
-goog.bindNative_ = function(fn, selfObj, var_args) {
-  return (fn.call.apply(fn.bind, arguments));
-};
-goog.bindJs_ = function(fn, selfObj, var_args) {
-  if (!fn) {
-    throw new Error();
-  }
-  if (arguments.length > 2) {
-    var boundArgs = Array.prototype.slice.call(arguments, 2);
-    return function() {
-      var newArgs = Array.prototype.slice.call(arguments);
-      Array.prototype.unshift.apply(newArgs, boundArgs);
-      return fn.apply(selfObj, newArgs);
-    };
-  } else {
-    return function() {
-      return fn.apply(selfObj, arguments);
-    };
-  }
-};
-goog.bind = function(fn, selfObj, var_args) {
-  if (Function.prototype.bind &&
-      Function.prototype.bind.toString().indexOf('native code') != -1) {
-    goog.bind = goog.bindNative_;
-  } else {
-    goog.bind = goog.bindJs_;
-  }
-  return goog.bind.apply(null, arguments);
-};
-goog.partial = function(fn, var_args) {
-  var args = Array.prototype.slice.call(arguments, 1);
-  return function() {
-    var newArgs = Array.prototype.slice.call(arguments);
-    newArgs.unshift.apply(newArgs, args);
-    return fn.apply(this, newArgs);
-  };
-};
-goog.mixin = function(target, source) {
-  for (var x in source) {
-    target[x] = source[x];
-  }
-};
-goog.now = Date.now || (function() {
-  return +new Date();
-});
-goog.globalEval = function(script) {
-  if (goog.global.execScript) {
-    goog.global.execScript(script, 'JavaScript');
-  } else if (goog.global.eval) {
-    if (goog.evalWorksForGlobals_ == null) {
-      goog.global.eval('var _et_ = 1;');
-      if (typeof goog.global['_et_'] != 'undefined') {
-        delete goog.global['_et_'];
-        goog.evalWorksForGlobals_ = true;
-      } else {
-        goog.evalWorksForGlobals_ = false;
-      }
-    }
-    if (goog.evalWorksForGlobals_) {
-      goog.global.eval(script);
-    } else {
-      var doc = goog.global.document;
-      var scriptElt = doc.createElement('script');
-      scriptElt.type = 'text/javascript';
-      scriptElt.defer = false;
-      scriptElt.appendChild(doc.createTextNode(script));
-      doc.body.appendChild(scriptElt);
-      doc.body.removeChild(scriptElt);
-    }
-  } else {
-    throw Error('goog.globalEval not available');
-  }
-};
-goog.evalWorksForGlobals_ = null;
-goog.cssNameMapping_;
-goog.cssNameMappingStyle_;
-goog.getCssName = function(className, opt_modifier) {
-  var getMapping = function(cssName) {
-    return goog.cssNameMapping_[cssName] || cssName;
-  };
-  var renameByParts = function(cssName) {
-    var parts = cssName.split('-');
-    var mapped = [];
-    for (var i = 0; i < parts.length; i++) {
-      mapped.push(getMapping(parts[i]));
-    }
-    return mapped.join('-');
-  };
-  var rename;
-  if (goog.cssNameMapping_) {
-    rename = goog.cssNameMappingStyle_ == 'BY_WHOLE' ?
-        getMapping : renameByParts;
-  } else {
-    rename = function(a) {
-      return a;
-    };
-  }
-  if (opt_modifier) {
-    return className + '-' + rename(opt_modifier);
-  } else {
-    return rename(className);
-  }
-};
-goog.setCssNameMapping = function(mapping, opt_style) {
-  goog.cssNameMapping_ = mapping;
-  goog.cssNameMappingStyle_ = opt_style;
-};
-goog.global.CLOSURE_CSS_NAME_MAPPING;
-if (!COMPILED && goog.global.CLOSURE_CSS_NAME_MAPPING) {
-  goog.cssNameMapping_ = goog.global.CLOSURE_CSS_NAME_MAPPING;
-}
-goog.getMsg = function(str, opt_values) {
-  var values = opt_values || {};
-  for (var key in values) {
-    var value = ('' + values[key]).replace(/\$/g, '$$$$');
-    str = str.replace(new RegExp('\\{\\$' + key + '\\}', 'gi'), value);
-  }
-  return str;
-};
-goog.getMsgWithFallback = function(a, b) {
-  return a;
-};
-goog.exportSymbol = function(publicPath, object, opt_objectToExportTo) {
-  goog.exportPath_(publicPath, object, opt_objectToExportTo);
-};
-goog.exportProperty = function(object, publicName, symbol) {
-  object[publicName] = symbol;
-};
-goog.inherits = function(childCtor, parentCtor) {
-  function tempCtor() {};
-  tempCtor.prototype = parentCtor.prototype;
-  childCtor.superClass_ = parentCtor.prototype;
-  childCtor.prototype = new tempCtor();
-  childCtor.prototype.constructor = childCtor;
-};
-goog.base = function(me, opt_methodName, var_args) {
-  var caller = arguments.callee.caller;
-  if (caller.superClass_) {
-    return caller.superClass_.constructor.apply(
-        me, Array.prototype.slice.call(arguments, 1));
-  }
-  var args = Array.prototype.slice.call(arguments, 2);
-  var foundCaller = false;
-  for (var ctor = me.constructor;
-       ctor; ctor = ctor.superClass_ && ctor.superClass_.constructor) {
-    if (ctor.prototype[opt_methodName] === caller) {
-      foundCaller = true;
-    } else if (foundCaller) {
-      return ctor.prototype[opt_methodName].apply(me, args);
-    }
-  }
-  if (me[opt_methodName] === caller) {
-    return me.constructor.prototype[opt_methodName].apply(me, args);
-  } else {
-    throw Error(
-        'goog.base called from a method of one name ' +
-        'to a method of a different name');
-  }
-};
-goog.scope = function(fn) {
-  fn.call(goog.global);
-};
+    attachTo.setImmediate = setImmediate;
+    attachTo.clearImmediate = clearImmediate;
+}(new Function("return this")()));
+// Copyright 2009 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+/**
+ * @fileoverview Defines a Long class for representing a 64-bit two's-complement
+ * integer value, which faithfully simulates the behavior of a Java "long". This
+ * implementation is derived from LongLib in GWT.
+ *
+ */
 goog.provide('goog.math.Long');
+/**
+ * Constructs a 64-bit two's-complement integer, given its low and high 32-bit
+ * values as *signed* integers.  See the from* functions below for more
+ * convenient ways of constructing Longs.
+ *
+ * The internal representation of a long is the two given signed, 32-bit values.
+ * We use 32-bit pieces because these are the size of integers on which
+ * Javascript performs bit-operations.  For operations like addition and
+ * multiplication, we split each number into 16-bit pieces, which can easily be
+ * multiplied within Javascript's floating-point representation without overflow
+ * or change in sign.
+ *
+ * In the algorithms below, we frequently reduce the negative case to the
+ * positive case by negating the input(s) and then post-processing the result.
+ * Note that we must ALWAYS check specially whether those values are MIN_VALUE
+ * (-2^63) because -MIN_VALUE == MIN_VALUE (since 2^63 cannot be represented as
+ * a positive number, it overflows back into a negative).  Not handling this
+ * case would often result in infinite recursion.
+ *
+ * @param {number} low  The low (signed) 32 bits of the long.
+ * @param {number} high  The high (signed) 32 bits of the long.
+ * @constructor
+ */
 goog.math.Long = function(low, high) {
-  this.low_ = low | 0;
-  this.high_ = high | 0;
+  /**
+   * @type {number}
+   * @private
+   */
+  this.low_ = low | 0; // force into 32 signed bits.
+  /**
+   * @type {number}
+   * @private
+   */
+  this.high_ = high | 0; // force into 32 signed bits.
 };
+// NOTE: Common constant values ZERO, ONE, NEG_ONE, etc. are defined below the
+// from* methods on which they depend.
+/**
+ * A cache of the Long representations of small integer values.
+ * @type {!Object}
+ * @private
+ */
 goog.math.Long.IntCache_ = {};
+/**
+ * Returns a Long representing the given (32-bit) integer value.
+ * @param {number} value The 32-bit integer in question.
+ * @return {!goog.math.Long} The corresponding Long value.
+ */
 goog.math.Long.fromInt = function(value) {
   if (-128 <= value && value < 128) {
     var cachedObj = goog.math.Long.IntCache_[value];
@@ -2318,6 +2376,12 @@ goog.math.Long.fromInt = function(value) {
   }
   return obj;
 };
+/**
+ * Returns a Long representing the given value, provided that it is a finite
+ * number.  Otherwise, zero is returned.
+ * @param {number} value The number in question.
+ * @return {!goog.math.Long} The corresponding Long value.
+ */
 goog.math.Long.fromNumber = function(value) {
   if (isNaN(value) || !isFinite(value)) {
     return goog.math.Long.ZERO;
@@ -2333,9 +2397,23 @@ goog.math.Long.fromNumber = function(value) {
         (value / goog.math.Long.TWO_PWR_32_DBL_) | 0);
   }
 };
+/**
+ * Returns a Long representing the 64-bit integer that comes by concatenating
+ * the given high and low bits.  Each is assumed to use 32 bits.
+ * @param {number} lowBits The low 32-bits.
+ * @param {number} highBits The high 32-bits.
+ * @return {!goog.math.Long} The corresponding Long value.
+ */
 goog.math.Long.fromBits = function(lowBits, highBits) {
   return new goog.math.Long(lowBits, highBits);
 };
+/**
+ * Returns a Long representation of the given string, written using the given
+ * radix.
+ * @param {string} str The textual representation of the Long.
+ * @param {number=} opt_radix The radix in which the text is written.
+ * @return {!goog.math.Long} The corresponding Long value.
+ */
 goog.math.Long.fromString = function(str, opt_radix) {
   if (str.length == 0) {
     throw Error('number format error: empty string');
@@ -2349,6 +2427,8 @@ goog.math.Long.fromString = function(str, opt_radix) {
   } else if (str.indexOf('-') >= 0) {
     throw Error('number format error: interior "-" character: ' + str);
   }
+  // Do several (8) digits each time through the loop, so as to
+  // minimize the calls to the very expensive emulated div.
   var radixToPower = goog.math.Long.fromNumber(Math.pow(radix, 8));
   var result = goog.math.Long.ZERO;
   for (var i = 0; i < str.length; i += 8) {
@@ -2364,32 +2444,80 @@ goog.math.Long.fromString = function(str, opt_radix) {
   }
   return result;
 };
+// NOTE: the compiler should inline these constant values below and then remove
+// these variables, so there should be no runtime penalty for these.
+/**
+ * Number used repeated below in calculations.  This must appear before the
+ * first call to any from* function below.
+ * @type {number}
+ * @private
+ */
 goog.math.Long.TWO_PWR_16_DBL_ = 1 << 16;
+/**
+ * @type {number}
+ * @private
+ */
 goog.math.Long.TWO_PWR_24_DBL_ = 1 << 24;
+/**
+ * @type {number}
+ * @private
+ */
 goog.math.Long.TWO_PWR_32_DBL_ =
     goog.math.Long.TWO_PWR_16_DBL_ * goog.math.Long.TWO_PWR_16_DBL_;
+/**
+ * @type {number}
+ * @private
+ */
 goog.math.Long.TWO_PWR_31_DBL_ =
     goog.math.Long.TWO_PWR_32_DBL_ / 2;
+/**
+ * @type {number}
+ * @private
+ */
 goog.math.Long.TWO_PWR_48_DBL_ =
     goog.math.Long.TWO_PWR_32_DBL_ * goog.math.Long.TWO_PWR_16_DBL_;
+/**
+ * @type {number}
+ * @private
+ */
 goog.math.Long.TWO_PWR_64_DBL_ =
     goog.math.Long.TWO_PWR_32_DBL_ * goog.math.Long.TWO_PWR_32_DBL_;
+/**
+ * @type {number}
+ * @private
+ */
 goog.math.Long.TWO_PWR_63_DBL_ =
     goog.math.Long.TWO_PWR_64_DBL_ / 2;
+/** @type {!goog.math.Long} */
 goog.math.Long.ZERO = goog.math.Long.fromInt(0);
+/** @type {!goog.math.Long} */
 goog.math.Long.ONE = goog.math.Long.fromInt(1);
+/** @type {!goog.math.Long} */
 goog.math.Long.NEG_ONE = goog.math.Long.fromInt(-1);
+/** @type {!goog.math.Long} */
 goog.math.Long.MAX_VALUE =
     goog.math.Long.fromBits(0xFFFFFFFF | 0, 0x7FFFFFFF | 0);
+/** @type {!goog.math.Long} */
 goog.math.Long.MIN_VALUE = goog.math.Long.fromBits(0, 0x80000000 | 0);
+/**
+ * @type {!goog.math.Long}
+ * @private
+ */
 goog.math.Long.TWO_PWR_24_ = goog.math.Long.fromInt(1 << 24);
+/** @return {number} The value, assuming it is a 32-bit integer. */
 goog.math.Long.prototype.toInt = function() {
   return this.low_;
 };
+/** @return {number} The closest floating-point representation to this value. */
 goog.math.Long.prototype.toNumber = function() {
   return this.high_ * goog.math.Long.TWO_PWR_32_DBL_ +
          this.getLowBitsUnsigned();
 };
+/**
+ * @param {number=} opt_radix The radix in which the text should be written.
+ * @return {string} The textual representation of this value.
+ * @override
+ */
 goog.math.Long.prototype.toString = function(opt_radix) {
   var radix = opt_radix || 10;
   if (radix < 2 || 36 < radix) {
@@ -2400,6 +2528,8 @@ goog.math.Long.prototype.toString = function(opt_radix) {
   }
   if (this.isNegative()) {
     if (this.equals(goog.math.Long.MIN_VALUE)) {
+      // We need to change the Long value before it can be negated, so we remove
+      // the bottom-most digit in this base and then recurse to do the rest.
       var radixLong = goog.math.Long.fromNumber(radix);
       var div = this.div(radixLong);
       var rem = div.multiply(radixLong).subtract(this);
@@ -2408,6 +2538,8 @@ goog.math.Long.prototype.toString = function(opt_radix) {
       return '-' + this.negate().toString(radix);
     }
   }
+  // Do several (6) digits each time through the loop, so as to
+  // minimize the calls to the very expensive emulated div.
   var radixToPower = goog.math.Long.fromNumber(Math.pow(radix, 6));
   var rem = this;
   var result = '';
@@ -2426,16 +2558,23 @@ goog.math.Long.prototype.toString = function(opt_radix) {
     }
   }
 };
+/** @return {number} The high 32-bits as a signed value. */
 goog.math.Long.prototype.getHighBits = function() {
   return this.high_;
 };
+/** @return {number} The low 32-bits as a signed value. */
 goog.math.Long.prototype.getLowBits = function() {
   return this.low_;
 };
+/** @return {number} The low 32-bits as an unsigned value. */
 goog.math.Long.prototype.getLowBitsUnsigned = function() {
   return (this.low_ >= 0) ?
       this.low_ : goog.math.Long.TWO_PWR_32_DBL_ + this.low_;
 };
+/**
+ * @return {number} Returns the number of bits needed to represent the absolute
+ *     value of this Long.
+ */
 goog.math.Long.prototype.getNumBitsAbs = function() {
   if (this.isNegative()) {
     if (this.equals(goog.math.Long.MIN_VALUE)) {
@@ -2453,33 +2592,66 @@ goog.math.Long.prototype.getNumBitsAbs = function() {
     return this.high_ != 0 ? bit + 33 : bit + 1;
   }
 };
+/** @return {boolean} Whether this value is zero. */
 goog.math.Long.prototype.isZero = function() {
   return this.high_ == 0 && this.low_ == 0;
 };
+/** @return {boolean} Whether this value is negative. */
 goog.math.Long.prototype.isNegative = function() {
   return this.high_ < 0;
 };
+/** @return {boolean} Whether this value is odd. */
 goog.math.Long.prototype.isOdd = function() {
   return (this.low_ & 1) == 1;
 };
+/**
+ * @param {goog.math.Long} other Long to compare against.
+ * @return {boolean} Whether this Long equals the other.
+ */
 goog.math.Long.prototype.equals = function(other) {
   return (this.high_ == other.high_) && (this.low_ == other.low_);
 };
+/**
+ * @param {goog.math.Long} other Long to compare against.
+ * @return {boolean} Whether this Long does not equal the other.
+ */
 goog.math.Long.prototype.notEquals = function(other) {
   return (this.high_ != other.high_) || (this.low_ != other.low_);
 };
+/**
+ * @param {goog.math.Long} other Long to compare against.
+ * @return {boolean} Whether this Long is less than the other.
+ */
 goog.math.Long.prototype.lessThan = function(other) {
   return this.compare(other) < 0;
 };
+/**
+ * @param {goog.math.Long} other Long to compare against.
+ * @return {boolean} Whether this Long is less than or equal to the other.
+ */
 goog.math.Long.prototype.lessThanOrEqual = function(other) {
   return this.compare(other) <= 0;
 };
+/**
+ * @param {goog.math.Long} other Long to compare against.
+ * @return {boolean} Whether this Long is greater than the other.
+ */
 goog.math.Long.prototype.greaterThan = function(other) {
   return this.compare(other) > 0;
 };
+/**
+ * @param {goog.math.Long} other Long to compare against.
+ * @return {boolean} Whether this Long is greater than or equal to the other.
+ */
 goog.math.Long.prototype.greaterThanOrEqual = function(other) {
   return this.compare(other) >= 0;
 };
+/**
+ * Compares this Long with the given one.
+ * @param {goog.math.Long} other Long to compare against.
+ * @return {number} 0 if they are the same, 1 if the this is greater, and -1
+ *     if the given one is greater.
+ */
 goog.math.Long.prototype.compare = function(other) {
   if (this.equals(other)) {
     return 0;
@@ -2492,12 +2664,14 @@ goog.math.Long.prototype.compare = function(other) {
   if (!thisNeg && otherNeg) {
     return 1;
   }
+  // at this point, the signs are the same, so subtraction will not overflow
   if (this.subtract(other).isNegative()) {
     return -1;
   } else {
     return 1;
   }
 };
+/** @return {!goog.math.Long} The negation of this value. */
 goog.math.Long.prototype.negate = function() {
   if (this.equals(goog.math.Long.MIN_VALUE)) {
     return goog.math.Long.MIN_VALUE;
@@ -2505,7 +2679,13 @@ goog.math.Long.prototype.negate = function() {
     return this.not().add(goog.math.Long.ONE);
   }
 };
+/**
+ * Returns the sum of this and the given Long.
+ * @param {goog.math.Long} other Long to add to this one.
+ * @return {!goog.math.Long} The sum of this and the given Long.
+ */
 goog.math.Long.prototype.add = function(other) {
+  // Divide each number into 4 chunks of 16 bits, and then sum the chunks.
   var a48 = this.high_ >>> 16;
   var a32 = this.high_ & 0xFFFF;
   var a16 = this.low_ >>> 16;
@@ -2528,9 +2708,19 @@ goog.math.Long.prototype.add = function(other) {
   c48 &= 0xFFFF;
   return goog.math.Long.fromBits((c16 << 16) | c00, (c48 << 16) | c32);
 };
+/**
+ * Returns the difference of this and the given Long.
+ * @param {goog.math.Long} other Long to subtract from this.
+ * @return {!goog.math.Long} The difference of this and the given Long.
+ */
 goog.math.Long.prototype.subtract = function(other) {
   return this.add(other.negate());
 };
+/**
+ * Returns the product of this and the given long.
+ * @param {goog.math.Long} other Long to multiply with this.
+ * @return {!goog.math.Long} The product of this and the other.
+ */
 goog.math.Long.prototype.multiply = function(other) {
   if (this.isZero()) {
     return goog.math.Long.ZERO;
@@ -2551,10 +2741,13 @@ goog.math.Long.prototype.multiply = function(other) {
   } else if (other.isNegative()) {
     return this.multiply(other.negate()).negate();
   }
+  // If both longs are small, use float multiplication
   if (this.lessThan(goog.math.Long.TWO_PWR_24_) &&
       other.lessThan(goog.math.Long.TWO_PWR_24_)) {
     return goog.math.Long.fromNumber(this.toNumber() * other.toNumber());
   }
+  // Divide each long into 4 chunks of 16 bits, and then add up 4x4 products.
+  // We can skip products that would overflow.
   var a48 = this.high_ >>> 16;
   var a32 = this.high_ & 0xFFFF;
   var a16 = this.low_ >>> 16;
@@ -2586,6 +2779,11 @@ goog.math.Long.prototype.multiply = function(other) {
   c48 &= 0xFFFF;
   return goog.math.Long.fromBits((c16 << 16) | c00, (c48 << 16) | c32);
 };
+/**
+ * Returns this Long divided by the given one.
+ * @param {goog.math.Long} other Long by which to divide.
+ * @return {!goog.math.Long} This Long divided by the given one.
+ */
 goog.math.Long.prototype.div = function(other) {
   if (other.isZero()) {
     throw Error('division by zero');
@@ -2595,10 +2793,11 @@ goog.math.Long.prototype.div = function(other) {
   if (this.equals(goog.math.Long.MIN_VALUE)) {
     if (other.equals(goog.math.Long.ONE) ||
         other.equals(goog.math.Long.NEG_ONE)) {
-      return goog.math.Long.MIN_VALUE;
+      return goog.math.Long.MIN_VALUE; // recall that -MIN_VALUE == MIN_VALUE
     } else if (other.equals(goog.math.Long.MIN_VALUE)) {
       return goog.math.Long.ONE;
     } else {
+      // At this point, we have |other| >= 2, so |this/other| < |MIN_VALUE|.
       var halfThis = this.shiftRight(1);
       var approx = halfThis.div(other).shiftLeft(1);
       if (approx.equals(goog.math.Long.ZERO)) {
@@ -2621,12 +2820,23 @@ goog.math.Long.prototype.div = function(other) {
   } else if (other.isNegative()) {
     return this.div(other.negate()).negate();
   }
+  // Repeat the following until the remainder is less than other:  find a
+  // floating-point that approximates remainder / other *from below*, add this
+  // into the result, and subtract it from the remainder.  It is critical that
+  // the approximate value is less than or equal to the real value so that the
+  // remainder never becomes negative.
   var res = goog.math.Long.ZERO;
   var rem = this;
   while (rem.greaterThanOrEqual(other)) {
+    // Approximate the result of division. This may be a little greater or
+    // smaller than the actual value.
     var approx = Math.max(1, Math.floor(rem.toNumber() / other.toNumber()));
+    // We will tweak the approximate result by changing it in the 48-th digit or
+    // the smallest non-fractional digit, whichever is larger.
     var log2 = Math.ceil(Math.log(approx) / Math.LN2);
     var delta = (log2 <= 48) ? 1 : Math.pow(2, log2 - 48);
+    // Decrease the approximation until it is smaller than the remainder.  Note
+    // that if it is too large, the product overflows and is negative.
     var approxRes = goog.math.Long.fromNumber(approx);
     var approxRem = approxRes.multiply(other);
     while (approxRem.isNegative() || approxRem.greaterThan(rem)) {
@@ -2634,6 +2844,8 @@ goog.math.Long.prototype.div = function(other) {
       approxRes = goog.math.Long.fromNumber(approx);
       approxRem = approxRes.multiply(other);
     }
+    // We know the answer can't be zero... and actually, zero would cause
+    // infinite recursion since we would make no progress.
     if (approxRes.isZero()) {
       approxRes = goog.math.Long.ONE;
     }
@@ -2642,24 +2854,50 @@ goog.math.Long.prototype.div = function(other) {
   }
   return res;
 };
+/**
+ * Returns this Long modulo the given one.
+ * @param {goog.math.Long} other Long by which to mod.
+ * @return {!goog.math.Long} This Long modulo the given one.
+ */
 goog.math.Long.prototype.modulo = function(other) {
   return this.subtract(this.div(other).multiply(other));
 };
+/** @return {!goog.math.Long} The bitwise-NOT of this value. */
 goog.math.Long.prototype.not = function() {
   return goog.math.Long.fromBits(~this.low_, ~this.high_);
 };
+/**
+ * Returns the bitwise-AND of this Long and the given one.
+ * @param {goog.math.Long} other The Long with which to AND.
+ * @return {!goog.math.Long} The bitwise-AND of this and the other.
+ */
 goog.math.Long.prototype.and = function(other) {
   return goog.math.Long.fromBits(this.low_ & other.low_,
                                  this.high_ & other.high_);
 };
+/**
+ * Returns the bitwise-OR of this Long and the given one.
+ * @param {goog.math.Long} other The Long with which to OR.
+ * @return {!goog.math.Long} The bitwise-OR of this and the other.
+ */
 goog.math.Long.prototype.or = function(other) {
   return goog.math.Long.fromBits(this.low_ | other.low_,
                                  this.high_ | other.high_);
 };
+/**
+ * Returns the bitwise-XOR of this Long and the given one.
+ * @param {goog.math.Long} other The Long with which to XOR.
+ * @return {!goog.math.Long} The bitwise-XOR of this and the other.
+ */
 goog.math.Long.prototype.xor = function(other) {
   return goog.math.Long.fromBits(this.low_ ^ other.low_,
                                  this.high_ ^ other.high_);
 };
+/**
+ * Returns this Long with bits shifted to the left by the given amount.
+ * @param {number} numBits The number of bits by which to shift.
+ * @return {!goog.math.Long} This shifted to the left by the given amount.
+ */
 goog.math.Long.prototype.shiftLeft = function(numBits) {
   numBits &= 63;
   if (numBits == 0) {
@@ -2676,6 +2914,11 @@ goog.math.Long.prototype.shiftLeft = function(numBits) {
     }
   }
 };
+/**
+ * Returns this Long with bits shifted to the right by the given amount.
+ * @param {number} numBits The number of bits by which to shift.
+ * @return {!goog.math.Long} This shifted to the right by the given amount.
+ */
 goog.math.Long.prototype.shiftRight = function(numBits) {
   numBits &= 63;
   if (numBits == 0) {
@@ -2694,6 +2937,13 @@ goog.math.Long.prototype.shiftRight = function(numBits) {
     }
   }
 };
+/**
+ * Returns this Long with bits shifted to the right by the given amount, with
+ * the new top bits matching the current sign bit.
+ * @param {number} numBits The number of bits by which to shift.
+ * @return {!goog.math.Long} This shifted to the right by the given amount, with
+ *     zeros placed into the new leading bits.
+ */
 goog.math.Long.prototype.shiftRightUnsigned = function(numBits) {
   numBits &= 63;
   if (numBits == 0) {
@@ -2712,6 +2962,19 @@ goog.math.Long.prototype.shiftRightUnsigned = function(numBits) {
     }
   }
 };
+/*
+  simple set with reasonably fast iteration though an array, which may contain nulls
+  elements must be objects that have a unique _key property
+  collections are expected to be homogeneous
+
+  when iterating over a set with an iterator, the following operations are safe:
+
+   - adding an element to the set (the existing iterator will iterate over the new elements)
+   - removing the last returned element through the iterator
+
+   behaviour for deleting elements is unpredictable and unsafe
+*/
+/** @constructor */
 function h$Set(s) {
     this._vals = [];
     this._keys = [];
@@ -2723,6 +2986,7 @@ h$Set.prototype.size = function() {
 h$Set.prototype.add = function(o) {
     if((typeof o !== 'object' && typeof o !== 'function') || typeof o._key !== 'number') throw ("h$Set.add: invalid element: " + o);
     if(this._size > 0) {
+//        if(this._storedProto !== o.prototype) throw ("h$Set.add: unexpected element prototype: " + o)
     } else {
         this._storedProto = o.prototype;
     }
@@ -2753,9 +3017,11 @@ h$Set.prototype.has = function(o) {
 h$Set.prototype.iter = function() {
     return new h$SetIter(this);
 }
+// returns an array with all values, might contain additional nulls at the end
 h$Set.prototype.values = function() {
     return this._vals;
 }
+/** @constructor */
 function h$SetIter(s) {
     this._n = 0;
     this._s = s;
@@ -2777,12 +3043,22 @@ h$SetIter.prototype.peek = function() {
         return null;
     }
 }
+// remove the last element returned
 h$SetIter.prototype.remove = function() {
     if(!this._r) {
         this._s.remove(this._s._vals[--this._n]);
         this._r = true;
     }
 }
+/*
+  map, iteration restrictions are the same as for set
+  keys need to be objects with a unique _key property
+
+  keys are expected to have the same prototype
+
+  values may be anything (but note that the values array might have additional nulls)
+*/
+/** @constructor */
 function h$Map() {
     this._pairsKeys = [];
     this._pairsValues = [];
@@ -2843,12 +3119,15 @@ h$Map.prototype.get = function(k) {
 h$Map.prototype.iter = function() {
     return new h$MapIter(this);
 }
+// returned array might have some trailing nulls
 h$Map.prototype.keys = function () {
     return this._pairsKeys;
 }
+// returned array might have some trailing nulls
 h$Map.prototype.values = function() {
     return this._pairsValues;
 }
+/** @constructor */
 function h$MapIter(m) {
     this._n = 0;
     this._m = m;
@@ -2865,6 +3144,12 @@ h$MapIter.prototype.peek = function() {
 h$MapIter.prototype.peekVal = function() {
     return this._n < this._m._size ? this._m._pairsValues[this._n] : null;
 }
+/*
+  simple queue, returns null when empty
+  it's safe to enqueue new items while iterating, not safe to dequeue
+  (new items will not be iterated over)
+*/
+/** @constructor */
 function h$Queue() {
     var b = { b: [], n: null };
     this._blocks = 1;
@@ -2933,6 +3218,12 @@ h$Queue.prototype.iter = function() {
         }
     }
 }
+/*
+   binary min-heap / set
+   - iteration is not in order of priority
+   - values can be removed, need to have the ._key property
+*/
+/** @constructor */
 function h$HeapSet() {
     this._keys = [];
     this._prios = [];
@@ -2942,6 +3233,7 @@ function h$HeapSet() {
 h$HeapSet.prototype.size = function() {
     return this._size;
 }
+// add a node, if it already exists, it's moved to the new priority
 h$HeapSet.prototype.add = function(op,o) {
     if((typeof o !== 'object' && typeof o !== 'function') || typeof o._key !== 'number') throw ("h$HeapSet.add: invalid element: " + o);
     if(this._size > 0) {
@@ -2951,7 +3243,7 @@ h$HeapSet.prototype.add = function(op,o) {
     }
     if(this._keys[o._key] !== undefined && this._vals[this._keys[o._key]] !== o) throw ("h$Set.add: duplicate key: " + o);
     var p = this._prios, k = this._keys, v = this._vals, x = k[o._key];
-    if(x !== undefined) {
+    if(x !== undefined) { // adjust node
         var oop = p[x];
         if(oop !== op) {
             p[x] = op;
@@ -2961,7 +3253,7 @@ h$HeapSet.prototype.add = function(op,o) {
                 this._downHeap(x);
             }
         }
-    } else {
+    } else { // new node
         var s = this._size++;
         k[o._key] = s;
         p[s] = op;
@@ -3005,6 +3297,7 @@ h$HeapSet.prototype.iter = function() {
         return n < s ? v[n++] : null;
     }
 }
+// may be longer than this.size(), remainder is filled with nulls
 h$HeapSet.prototype.values = function() {
     return this._vals;
 }
@@ -3062,11 +3355,15 @@ h$HeapSet.prototype._upHeap = function(i) {
         }
     }
 }
+// #define GHCJS_TRACE_META 1
+// memory management and pointer emulation
+// static init, non-caf
 function h$sti(i,c,xs,ccs) {
     i.f = c;
     i.cc = ccs;
     h$init_closure(i,xs);
 }
+// static init, caf
 function h$stc(i,c,ccs) {
     i.f = c;
     i.cc = ccs;
@@ -3090,15 +3387,19 @@ function h$stl(o, xs, t, ccs) {
     o.m = r.m;
     o.cc = ccs;
 }
+// delayed init for top-level closures
 var h$staticDelayed = [];
 function h$d() {
+    // pass a temporary CCS that won't make assertions in h$cN family alert
     var c = h$c(null, h$CCS_SYSTEM);
     h$staticDelayed.push(c);
     return c;
 }
+// fixme remove this when we have a better way to immediately init these things
 function h$di(c) {
     h$staticDelayed.push(c);
 }
+// initialize global object to primitive value
 function h$p(x) {
     h$staticDelayed.push(x);
     return x;
@@ -3122,14 +3423,18 @@ function h$runInitStatic() {
         }
         h$initStatic = [];
     }
+    // free the references to the temporary tables used for
+    // initialising all our static data
     h$entriesStack = null;
     h$staticsStack = null;
 }
-function h$initInfoTables ( depth
-                          , funcs
-                          , objects
-                          , lbls
-                          , infoMeta
+// initialize packed info tables
+// see Gen2.Compactor for how the data is encoded
+function h$initInfoTables ( depth // depth in the base chain
+                          , funcs // array with all entry functions
+                          , objects // array with all the global heap objects
+                          , lbls // array with non-haskell labels
+                          , infoMeta // packed info
                           , infoStatic
                           ) {
   ;
@@ -3164,7 +3469,7 @@ function h$initInfoTables ( depth
     throw ("h$initInfoTables: invalid code in info table: " + c + " at " + pos)
   }
   function nextCh() {
-        return next();
+        return next(); // fixme map readable chars
   }
     function nextInt() {
         var n = next();
@@ -3255,7 +3560,7 @@ function h$initInfoTables ( depth
         case 7:
             ;
             throw "string arg";
-            return "";
+            return ""; // fixme haskell string
         case 8:
             ;
             n = next();
@@ -3311,12 +3616,12 @@ function h$initInfoTables ( depth
     o = funcs[i];
     var ot;
     var oa = 0;
-    var oregs = 256;
+    var oregs = 256; // one register no skip
     switch(next()) {
-      case 0:
+      case 0: // thunk
         ot = 0;
         break;
-      case 1:
+      case 1: // fun
         ot = 1
         var arity = next();
         var skipRegs = next();
@@ -3325,11 +3630,11 @@ function h$initInfoTables ( depth
         oregs = (regs << 8) | skip;
         oa = arity + ((regs-1+skip) << 8);
         break;
-      case 2:
+      case 2: // con
         ot = 2;
         oa = next();
         break;
-      case 3:
+      case 3: // stack frame
         ot = -1;
         oa = 0;
         oregs = next();
@@ -3346,6 +3651,9 @@ function h$initInfoTables ( depth
           srt.push(nextObj());
       }
     }
+    // h$log("result: " + ot + " " + oa + " " + oregs + " [" + srt + "] " + size);
+    // h$log("orig: " + o.t + " " + o.a + " " + o.r + " [" + o.s + "] " + o.size);
+    // if(ot !== o.t || oa !== o.a || oregs !== o.r || size !== o.size) throw "inconsistent";
     o.t = ot;
     o.i = [];
     o.n = "";
@@ -3360,34 +3668,36 @@ function h$initInfoTables ( depth
     for(i=0;i<objects.length;i++) {
       ;
       o = objects[i];
+        // traceMetaObjBefore(o);
       var nx = next();
       ;
       switch(nx) {
-      case 0:
+      case 0: // no init, could be a primitive value (still in the list since others might reference it)
+          // h$log("zero init");
           break;
-      case 1:
+      case 1: // staticfun
           o.f = nextEntry();
           ;
           break;
-      case 2:
+      case 2: // staticThunk
           ;
           o.f = nextEntry();
           h$CAFs.push(o);
           h$CAFsReset.push(o.f);
           break;
-      case 3:
+      case 3: // staticPrim false, no init
           ;
           break;
-      case 4:
+      case 4: // staticPrim true, no init
           ;
           break;
       case 5:
           ;
           break;
-      case 6:
+      case 6: // staticString
           ;
           break;
-      case 7:
+      case 7: // staticBin
           ;
           n = next();
           var b = h$newByteArray(n);
@@ -3395,11 +3705,11 @@ function h$initInfoTables ( depth
               b.u8[j] = next();
           }
           break;
-      case 8:
+      case 8: // staticEmptyList
           ;
           o.f = h$ghczmprimZCGHCziTypesziZMZN.f;
           break;
-      case 9:
+      case 9: // staticList
           ;
           n = next();
           var hasTail = next();
@@ -3412,7 +3722,7 @@ function h$initInfoTables ( depth
           o.d1 = c.d1;
           o.d2 = c.d2;
           break;
-      case 10:
+      case 10: // staticData n args
           ;
           n = next();
           ;
@@ -3421,40 +3731,42 @@ function h$initInfoTables ( depth
               h$setField(o, j, nextArg());
           }
           break;
-      case 11:
+      case 11: // staticData 0 args
           ;
           o.f = nextEntry();
           break;
-      case 12:
+      case 12: // staticData 1 args
           ;
           o.f = nextEntry();
           o.d1 = nextArg();
           break;
-      case 13:
+      case 13: // staticData 2 args
           ;
           o.f = nextEntry();
           o.d1 = nextArg();
           o.d2 = nextArg();
           break;
-      case 14:
+      case 14: // staticData 3 args
           ;
           o.f = nextEntry();
           o.d1 = nextArg();
+          // should be the correct order
           o.d2 = { d1: nextArg(), d2: nextArg()};
           break;
-      case 15:
+      case 15: // staticData 4 args
           ;
           o.f = nextEntry();
           o.d1 = nextArg();
+          // should be the correct order
           o.d2 = { d1: nextArg(), d2: nextArg(), d3: nextArg() };
           break;
-      case 16:
+      case 16: // staticData 5 args
           ;
           o.f = nextEntry();
           o.d1 = nextArg();
           o.d2 = { d1: nextArg(), d2: nextArg(), d3: nextArg(), d4: nextArg() };
           break;
-      case 17:
+      case 17: // staticData 6 args
           ;
           o.f = nextEntry();
           o.d1 = nextArg();
@@ -3472,11 +3784,12 @@ function h$initPtrLbl(isFun, lbl) {
 function h$callDynamic(f) {
     return f.apply(f, Array.prototype.slice.call(arguments, 2));
 }
+// slice an array of heap objects
 function h$sliceArray(a, start, n) {
   return a.slice(start, start+n);
 }
 function h$memcpy() {
-  if(arguments.length === 3) {
+  if(arguments.length === 3) { // ByteArray# -> ByteArray# copy
     var dst = arguments[0];
     var src = arguments[1];
     var n = arguments[2];
@@ -3485,7 +3798,7 @@ function h$memcpy() {
     }
     ret1 = 0;
     return dst;
-  } else if(arguments.length === 5) {
+  } else if(arguments.length === 5) { // Addr# -> Addr# copy
     var dst = arguments[0];
     var dst_off = arguments[1]
     var src = arguments[2];
@@ -3500,6 +3813,7 @@ function h$memcpy() {
     throw "h$memcpy: unexpected argument";
   }
 }
+// note: only works for objects bigger than two!
 function h$setField(o,n,v) {
     if(n > 0 && !o.d2) o.d2 = {};
     switch(n) {
@@ -3816,6 +4130,7 @@ function h$setField(o,n,v) {
 function h$mkExportDyn(t, f) {
     h$log("making dynamic export: " + t);
     h$log("haskell fun: " + f + " " + h$collectProps(f));
+    // fixme register things, global static data
     var ff = function() {
         h$log("running some haskell for you");
         return 12;
@@ -3864,6 +4179,34 @@ function h$newByteArray(len) {
          , dv: new DataView(buf)
          }
 }
+/*
+  Unboxed arrays in GHC use the ByteArray# and MutableByteArray#
+  primitives. In GHCJS these primitives are represented by an
+  object that contains a JavaScript ArrayBuffer and several views
+  (typed arrays) on that buffer.
+
+  Usually you can use GHCJS.Foreign.wrapBuffer and
+  GHCJS.Foreign.wrapMutableBuffer to do the conversion. If you need
+  more control or lower level acces, read on.
+
+  You can use h$wrapBuffer to wrap any JavaScript ArrayBuffer
+  into such an object, without copying the buffer. Since typed array
+  access is aligned, not all views are available
+  if the offset of the buffer is not a multiple of 8.
+
+  Since IO has kind * -> *, you cannot return IO ByteArray#
+  from a foreign import, even with the UnliftedFFITypes
+  extension. Return a JSRef instead and use unsafeCoerce
+  to convert it to a Data.Primitive.ByteArray.ByteArray or
+  Data.Primitive.ByteArray.MutableByteArray (primitive package)
+  and pattern match on the constructor to get the
+  primitive value out.
+
+  These types have the same runtime representation (a data
+  constructor with one regular (one JavaScript variable)
+  field) as a JSRef, so the conversion is safe, as long
+  as everything is fully evaluated.
+*/
 function h$wrapBuffer(buf, unalignedOk, offset, length) {
   if(!unalignedOk && offset && offset % 8 !== 0) {
     throw ("h$wrapBuffer: offset not aligned:" + offset);
@@ -3883,6 +4226,7 @@ function h$wrapBuffer(buf, unalignedOk, offset, length) {
          };
 }
 var h$stableNameN = 1;
+/** @constructor */
 function h$StableName(m) {
     this.m = m;
     this.s = null;
@@ -3924,11 +4268,11 @@ function h$free() {
 function h$memset() {
   var buf_v, buf_off, chr, n;
   buf_v = arguments[0];
-  if(arguments.length == 4) {
+  if(arguments.length == 4) { // Addr#
     buf_off = arguments[1];
     chr = arguments[2];
     n = arguments[3];
-  } else if(arguments.length == 3) {
+  } else if(arguments.length == 3) { // ByteString#
     buf_off = 0;
     chr = arguments[1];
     n = arguments[2];
@@ -3971,8 +4315,16 @@ function h$mkFunctionPtr(f) {
 }
 var h$freeHaskellFunctionPtr = function () {
 }
+/*
+function h$createAdjustor(cconv, hptr, hptr_2, wptr, wptr_2, type) {
+    h$ret1 = hptr_2;
+    return hptr;
+};
+*/
+// extra roots for the heap scanner: objects with root property
 var h$extraRootsN = 0;
 var h$extraRoots = new h$Set();
+// 
 var h$domRoots = new h$Set();
 function h$makeCallback(retain, f, extraArgs, action) {
     var args = extraArgs.slice(0);
@@ -3984,7 +4336,7 @@ function h$makeCallback(retain, f, extraArgs, action) {
         c._key = ++h$extraRootsN;
         c.root = action;
         h$extraRoots.add(c);
-    } else if(retain) {
+    } else if(retain) { // DOM retain
     }
     return c;
 }
@@ -4012,13 +4364,16 @@ function h$makeCallbackApply(retain, n, f, extraArgs, fun) {
       c._key = ++h$extraRootsN;
       h$extraRoots.add(c);
   } else if(retain) {
+    // fixme: retain this while `retain' is in some DOM
   } else {
+    // no retainer
   }
   return c;
 }
 function h$mkJSRef(x) {
   return h$c1(h$ghcjszmprimZCGHCJSziPrimziJSRef_con_e, x);
 }
+// fixme these don't guarantee that the object has a key!
 function h$retain(c) {
   h$extraRoots.add(c);
 }
@@ -4067,41 +4422,140 @@ function h$munmap(addr_d, addr_o, size) {
   }
   return 0;
 }
-var h$gcMark = 2;
+/*
+  Do garbage collection where the JavaScript GC doesn't suffice or needs some help:
+
+  - run finalizers for weak references
+  - find unreferenced CAFs and reset them (unless h$retainCAFs is set)
+  - shorten stacks that are mostly empty
+  - reset unused parts of stacks to null
+  - reset registers to null
+  - reset return variables to null
+  - throw exceptions to threads that are blocked on an unreachable MVar/STM transaction
+  - drop unnecessary references for selector thunks
+
+  The gc uses the .m field to store its mark in all the objects it marks. for heap objects,
+  the .m field is also used for other things, like stable names, the gc only changes
+  the two least significant bits for these.
+
+  The gc starts with all threads as roots in addition to callbacks passed to JavaScript
+  that that are retained. If you have custom JavaScript data structures that contain
+  Haskell heap object references, you can use extensible retention to find these
+  references and add thm to the work queue. h$registerExtensibleRetensionRoot(f) calls
+  f(currentMark) at the start of every gc, h$registerExtensibleRetention(f) calls f(o, currentMark)
+  for every unknown object found on the Haskell heap.
+
+  Extensible retention is a low-level mechanism and should typically only be used by
+  bindings that guarantee that the shape of the JS objects exactly matches what
+  the scanner expects. Care should be taken to make sure that the objects never
+  escape the reach of the scanner.
+
+  Having correct reachability information is important, even if you choose to turn off
+  features like weak references and deallocating CAFs in production, since it helps
+  debugging by providing the profiler with accurate data and by properly raising
+  exceptions when threads become blocked indefinitely, usually indicating a bug or
+  memory leak.
+
+  assumptions:
+  - all threads suspended, no active registers
+  - h$currentThread == null or at least unused:
+       1. all reachable threads must be in h$threads or h$blocked
+       2. no registers contain any usable value
+  notes:
+  - gc() may replace the stack of any thread, make sure to reload h$stack after gc()
+*/
+/*
+  fixme, todo:
+  - mark posted exceptions to thread
+*/
+// these macros use a local mark variable
+var h$gcMark = 2; // 2 or 3 (objects initialized with 0)
 var h$retainCAFs = false;
 var h$CAFs = [];
 var h$CAFsReset = [];
+// 
+var h$extensibleRetentionRoots = [];
+var h$extensibleRetentionCallbacks = [];
+/*
+   after registering an extensible extension root f,
+   f() is called at the start of each gc invocation and is
+   expected to return an array with Haskell heap objects
+   to be treated as extra roots.
+ */
+function h$registerExtensibleRetentionRoot(f) {
+    h$extensibleRetentionRoots.push(f);
+}
+function h$unregisterExtensibleRetentionRoot(f) {
+    h$extensibleRetentionRoots = h$extensibleRetentionRoots.filter(function(g) { return f !== g; });
+}
+/*
+  after registering an extensible retention callback f,
+  f(o, currentMark) is called for every unknown object encountered on the
+  Haskell heap. f should return an array with found objects. If no objects
+  are found, f should return a boolean indicating whether the gc should skip
+  processing the objects with other extensible retention callbacks.
+
+  The gc may encounter the same object multiple times during the same scan,
+  so a callback should attempt to quickly return if the object has been scanned
+  already.
+
+   return value:
+     - array          scan objects contained in array, do not call other extension callbacks
+     - true           do not call other extension callbacks with this object
+     - false          call other extension callbacks with this object
+
+  Use -DGHCJS_TRACE_GC_UNKNOWN to find the JavaScript objects reachable
+  (through JSRef) on the Haskell heap for which none of the registered
+  extensible retention callbacks has returned true or an array.
+ */
+function h$registerExtensibleRetention(f) {
+    h$extensibleRetentionCallbacks.push(f);
+}
+function h$unregisterExtensibleRetention(f) {
+    h$extensibleRetentionCallbacks = h$extensibleRetentionCallbacks.filter(function(g) { return f !== g; });
+}
+// check whether the object is marked by the latest gc
 function h$isMarked(obj) {
   return (typeof obj === 'object' || typeof obj === 'function') &&
         ((typeof obj.m === 'number' && (obj.m & 3) === h$gcMark) || (obj.m && typeof obj.m === 'object' && obj.m.m === h$gcMark));
 }
+// do a quick gc of a thread:
+// - reset the stack (possibly shrinking storage for it)
+// - reset all global data
+// checks all known threads if t is null, but not h$currentThread
 function h$gcQuick(t) {
     if(h$currentThread !== null) throw "h$gcQuick: GC can only run when no thread is running";
     h$resetRegisters();
     h$resetResultVars();
     var i;
-    if(t !== null) {
-        if(t instanceof h$Thread) {
+    if(t !== null) { // reset specified threads
+        if(t instanceof h$Thread) { // only thread t
             h$resetThread(t);
-        } else {
+        } else { // assume it's an array
             for(var i=0;i<t.length;i++) h$resetThread(t[i]);
         }
-    } else {
+    } else { // all threads, h$currentThread assumed unused
         var nt, runnable = h$threads.iter();
         while((nt = runnable()) !== null) h$resetThread(nt);
         var iter = h$blocked.iter();
         while((nt = iter.next()) !== null) h$resetThread(nt);
     }
 }
+// run full marking for threads in h$blocked and h$threads, optionally t if t /= null
 function h$gc(t) {
     if(h$currentThread !== null) throw "h$gc: GC can only be run when no thread is running";
-    h$resetRetained();
     ;
     var start = Date.now();
     h$resetRegisters();
     h$resetResultVars();
+    h$resetRetained();
     h$gcMark = 5-h$gcMark;
     var i;
+   
+    for(i=h$extensibleRetentionRoots.length-1;i>=0;i--) {
+        var a = h$extensibleRetentionRoots[i]();
+        h$follow(a, a.length-1);
+    }
     ;
     if(t !== null) h$markThread(t);
     var nt, runnable = h$threads.iter();
@@ -4112,17 +4566,31 @@ function h$gc(t) {
             h$markThread(nt);
         }
     }
+    ;
     iter = h$extraRoots.iter();
     while((nt = iter.next()) !== null) h$follow(nt.root);
+    // now we've marked all the regular Haskell data, continue marking
+    // weak references and everything retained by DOM retainers
     h$markRetained();
+    // now all running threads and threads blocked on something that's
+    // not an MVar operation have been marked, including other threads
+    // they reference through their ThreadId
+    // clean up threads waiting on unreachable MVars:
+    // throw an exception to a thread (which brings it back
+    // to life), then scan it. Killing one thread might be enough
+    // since the killed thread could make other threads reachable again.
     var killedThread;
     while(killedThread = h$finalizeMVars()) {
         h$markThread(killedThread);
         h$markRetained();
     }
+    // mark all blocked threads
     iter = h$blocked.iter();
     while((nt = iter.next()) !== null) h$markThread(nt);
+    // and their weak references etc
     h$markRetained();
+    // now everything has been marked, bring out your dead references
+    // run finalizers for all weak references with unreachable keys
     finalizers = h$finalizeWeaks();
     h$clearWeaks();
     for(i=0;i<finalizers.length;i++) {
@@ -4132,8 +4600,9 @@ function h$gc(t) {
     h$markRetained();
     h$clearWeaks();
     h$scannedWeaks = [];
-    h$finalizeDom();
-    h$finalizeCAFs();
+    h$finalizeDom(); // remove all unreachable DOM retainers
+    h$finalizeCAFs(); // restore all unreachable CAFs to unevaluated state
+    h$updateDOMs();
     var now = Date.now();
     h$lastGc = now;
 }
@@ -4142,6 +4611,7 @@ function h$markRetained() {
     do {
         ;
         marked = false;
+        // mark all finalizers of weak references where the key is reachable
         iter = h$finalizers.iter();
         while((c = iter.next()) !== null) {
             if(!((typeof c.finalizer.m === 'number' && (c.finalizer.m & 3) === mark) || (typeof c.finalizer.m === 'object' && ((c.finalizer.m.m & 3) === mark))) && c.m.m === mark) {
@@ -4150,6 +4620,7 @@ function h$markRetained() {
                 marked = true;
             }
         }
+        // mark all callbacks where at least one of the DOM retainers is reachable
         iter = h$domRoots.iter();
         while((c = iter.next()) !== null) {
             if(!h$isMarked(c.root) && c.domRoots && c.domRoots.size() > 0) {
@@ -4163,6 +4634,7 @@ function h$markRetained() {
                 }
             }
         }
+        // mark weak values for reachable keys
         for(var i=h$scannedWeaks.length-1;i>=0;i--) {
             var w = h$scannedWeaks[i];
             if(w.keym.m === mark && w.val !== null && !((typeof w.val.m === 'number' && (w.val.m & 3) === mark) || (typeof w.val.m === 'object' && ((w.val.m.m & 3) === mark)))) {
@@ -4171,36 +4643,49 @@ function h$markRetained() {
                 marked = true;
             }
         }
+        // continue for a next round if we have marked something more
+        // note: this will be slow for very deep chains of weak refs,
+        // change this if that becomes a problem.
     } while(marked);
 }
 function h$markThread(t) {
     var mark = h$gcMark;
     ;
     if(((typeof t.m === 'number' && (t.m & 3) === mark) || (typeof t.m === 'object' && ((t.m.m & 3) === mark)))) return;
-    if(typeof t.m === 'number') { if (t.m !== (t.m & -4) | mark) { h$updRetained(t); } t.m = (t.m & -4)|mark; } else { if (t.m.m !== (t.m.m & -4) | mark) { h$updRetained(t); } t.m.m = (t.m.m & -4)|mark; };
-    if(t.stack === null) return;
+    if(typeof t.m === 'number') { t.m = (t.m&-4)|mark; if (t.constructor !== h$Thread) t.cc.retained++; } else { t.m.m = (t.m.m & -4)|mark; if (t.constructor !== h$Thread) t.cc.retained++; };
+    if(t.stack === null) return; // thread finished
     h$follow(t.stack, t.sp);
     h$resetThread(t);
 }
-function h$followObjGen(c, work) {
+// big object, not handled by 0..7 cases
+// keep out of h$follow to prevent deopt
+function h$followObjGen(c, work, w) {
    work.push(c.d1);
    var d = c.d2;
    for(var x in d) {
-     work.push(d[x]);
+//              if(d.hasOwnProperty(x)) {
+     work[w++] = d[x];;
+//              }
    }
+    return w;
 }
+// follow all references in the object obj and mark them with the current mark
+// if sp is a number, obj is assumed to be an array for which indices [0..sp] need
+// to be followed (used for thread stacks)
 function h$follow(obj, sp) {
-    var i, ii, iter, c, work;
+    var i, ii, iter, c, work, w;
     ;
     var work, mark = h$gcMark;
     if(typeof sp === 'number') {
         work = obj.slice(0, sp+1);
+        w = sp + 1;
     } else {
         work = [obj];
+        w = 1;
     }
-    while(work.length > 0) {
+    while(w > 0) {
         ;
-        c = work.pop();
+        c = work[--w];
         ;
         if(c !== null && typeof c === 'object' && ((typeof c.m === 'number' && (c.m&3) !== mark) || (typeof c.m === 'object' && c.m !== null && typeof c.m.m === 'number' && (c.m.m&3) !== mark))) {
             var doMark = false;
@@ -4208,75 +4693,103 @@ function h$follow(obj, sp) {
             ;
             if(typeof cf === 'function' && (typeof c.m === 'number' || typeof c.m === 'object')) {
                 ;
-                if(typeof c.m === 'number') { if (c.m !== (c.m & -4) | mark) { h$updRetained(c); } c.m = (c.m & -4)|mark; } else { if (c.m.m !== (c.m.m & -4) | mark) { h$updRetained(c); } c.m.m = (c.m.m & -4)|mark; };
+                // only change the two least significant bits for heap objects
+                if(typeof c.m === 'number') { c.m = (c.m&-4)|mark; if (c.constructor !== h$Thread) c.cc.retained++; } else { c.m.m = (c.m.m & -4)|mark; if (c.constructor !== h$Thread) c.cc.retained++; };
+                // dynamic references
                 var d = c.d2;
                 switch(cf.size) {
                 case 0: break;
-                case 1: work.push(c.d1); break;
-                case 2: work.push(c.d1, d); break;
-                case 3: var d3=c.d2; work.push(c.d1, d3.d1, d3.d2); break;
-                case 4: var d4=c.d2; work.push(c.d1, d4.d1, d4.d2, d4.d3); break;
-                case 5: var d5=c.d2; work.push(c.d1, d5.d1, d5.d2, d5.d3, d5.d4); break;
-                case 6: var d6=c.d2; work.push(c.d1, d6.d1, d6.d2, d6.d3, d6.d4, d6.d5); break;
-                case 7: var d7=c.d2; work.push(c.d1, d7.d1, d7.d2, d7.d3, d7.d4, d7.d5, d7.d6); break;
-                case 8: var d8=c.d2; work.push(c.d1, d8.d1, d8.d2, d8.d3, d8.d4, d8.d5, d8.d6, d8.d7); break;
-                case 9: var d9=c.d2; work.push(c.d1, d9.d1, d9.d2, d9.d3, d9.d4, d9.d5, d9.d6, d9.d7, d9.d8); break;
-                case 10: var d10=c.d2; work.push(c.d1, d10.d1, d10.d2, d10.d3, d10.d4, d10.d5, d10.d6, d10.d7, d10.d8, d10.d9); break;
-                case 11: var d11=c.d2; work.push(c.d1, d11.d1, d11.d2, d11.d3, d11.d4, d11.d5, d11.d6, d11.d7, d11.d8, d11.d9, d11.d10); break;
-                case 12: var d12=c.d2; work.push(c.d1, d12.d1, d12.d2, d12.d3, d12.d4, d12.d5, d12.d6, d12.d7, d12.d8, d12.d9, d12.d10, d12.d11); break;
-                default: h$followObjGen(c,work);
+                case 1: work[w++] = c.d1;; break;
+                case 2: { work[w++] = c.d1; work[w++] = d; }; break;
+                case 3: var d3=c.d2; { work[w++] = c.d1; work[w++] = d3.d1; work[w++] = d3.d2; }; break;
+                case 4: var d4=c.d2; { work[w++] = c.d1; work[w++] = d4.d1; work[w++] = d4.d2; work[w++] = d4.d3; }; break;
+                case 5: var d5=c.d2; { work[w++] = c.d1; work[w++] = d5.d1; work[w++] = d5.d2; work[w++] = d5.d3; }; work[w++] = d5.d4;; break;
+                case 6: var d6=c.d2; { work[w++] = c.d1; work[w++] = d6.d1; work[w++] = d6.d2; work[w++] = d6.d3; }; { work[w++] = d6.d4; work[w++] = d6.d5; }; break;
+                case 7: var d7=c.d2; { work[w++] = c.d1; work[w++] = d7.d1; work[w++] = d7.d2; work[w++] = d7.d3; }; { work[w++] = d7.d4; work[w++] = d7.d5; work[w++] = d7.d6; }; break;
+                case 8: var d8=c.d2; { work[w++] = c.d1; work[w++] = d8.d1; work[w++] = d8.d2; work[w++] = d8.d3; }; { work[w++] = d8.d4; work[w++] = d8.d5; work[w++] = d8.d6; work[w++] = d8.d7; }; break;
+                case 9: var d9=c.d2; { work[w++] = c.d1; work[w++] = d9.d1; work[w++] = d9.d2; work[w++] = d9.d3; }; { work[w++] = d9.d4; work[w++] = d9.d5; work[w++] = d9.d6; work[w++] = d9.d7; }; work[w++] = d9.d8;; break;
+                case 10: var d10=c.d2; { work[w++] = c.d1; work[w++] = d10.d1; work[w++] = d10.d2; work[w++] = d10.d3; }; { work[w++] = d10.d4; work[w++] = d10.d5; work[w++] = d10.d6; work[w++] = d10.d7; }; { work[w++] = d10.d8; work[w++] = d10.d9; }; break;
+                case 11: var d11=c.d2; { work[w++] = c.d1; work[w++] = d11.d1; work[w++] = d11.d2; work[w++] = d11.d3; }; { work[w++] = d11.d4; work[w++] = d11.d5; work[w++] = d11.d6; work[w++] = d11.d7; }; { work[w++] = d11.d8; work[w++] = d11.d9; work[w++] = d11.d10; }; break;
+                case 12: var d12=c.d2; { work[w++] = c.d1; work[w++] = d12.d1; work[w++] = d12.d2; work[w++] = d12.d3; }; { work[w++] = d12.d4; work[w++] = d12.d5; work[w++] = d12.d6; work[w++] = d12.d7; }; { work[w++] = d12.d8; work[w++] = d12.d9; work[w++] = d12.d10; work[w++] = d12.d11; }; break;
+                default: w = h$followObjGen(c,work,w);
                 }
+                // static references
                 var s = cf.s;
                 if(s !== null) {
                     ;
-                    for(var i=0;i<s.length;i++) work.push(s[i]);
+                    for(var i=0;i<s.length;i++) work[w++] = s[i];;
                 }
             } else if(c instanceof h$Weak) {
                 ;
                 if(c.keym.m === mark) {
-                    if(c.val !== null && !((typeof c.val.m === 'number' && (c.val.m & 3) === mark) || (typeof c.val.m === 'object' && ((c.val.m.m & 3) === mark)))) work.push(c.val);
+                    if(c.val !== null && !((typeof c.val.m === 'number' && (c.val.m & 3) === mark) || (typeof c.val.m === 'object' && ((c.val.m.m & 3) === mark)))) work[w++] = c.val;;
                 } else {
+                    // fixme we should keep separate arrays for
+                    // value mark pending / cleanup pending?
                     if(c.val !== null) h$scannedWeaks.push(c);
                 }
-                if(typeof c.m === 'number') { if (c.m !== (c.m & -4) | mark) { h$updRetained(c); } c.m = (c.m & -4)|mark; } else { if (c.m.m !== (c.m.m & -4) | mark) { h$updRetained(c); } c.m.m = (c.m.m & -4)|mark; };
+                if(typeof c.m === 'number') { c.m = (c.m&-4)|mark; if (c.constructor !== h$Thread) c.cc.retained++; } else { c.m.m = (c.m.m & -4)|mark; if (c.constructor !== h$Thread) c.cc.retained++; };
             } else if(c instanceof h$MVar) {
                 ;
-                if(typeof c.m === 'number') { if (c.m !== (c.m & -4) | mark) { h$updRetained(c); } c.m = (c.m & -4)|mark; } else { if (c.m.m !== (c.m.m & -4) | mark) { h$updRetained(c); } c.m.m = (c.m.m & -4)|mark; };
+                if(typeof c.m === 'number') { c.m = (c.m&-4)|mark; if (c.constructor !== h$Thread) c.cc.retained++; } else { c.m.m = (c.m.m & -4)|mark; if (c.constructor !== h$Thread) c.cc.retained++; };
+                /*
+                   only push the values in the queues, not the waiting threads
+
+                   the threads will be scanned after threads waiting on unreachable
+                   MVars have been cleaned up
+                 */
                 iter = c.writers.iter();
-                while((ii = iter()) !== null) work.push(ii[1]);
-                if(c.val !== null && !((typeof c.val.m === 'number' && (c.val.m & 3) === mark) || (typeof c.val.m === 'object' && ((c.val.m.m & 3) === mark)))) work.push(c.val);
+                while((ii = iter()) !== null) work[w++] = ii[1];;
+                if(c.val !== null && !((typeof c.val.m === 'number' && (c.val.m & 3) === mark) || (typeof c.val.m === 'object' && ((c.val.m.m & 3) === mark)))) work[w++] = c.val;;
             } else if(c instanceof h$MutVar) {
                 ;
-                if(typeof c.m === 'number') { if (c.m !== (c.m & -4) | mark) { h$updRetained(c); } c.m = (c.m & -4)|mark; } else { if (c.m.m !== (c.m.m & -4) | mark) { h$updRetained(c); } c.m.m = (c.m.m & -4)|mark; };
-                work.push(c.val);
+                if(typeof c.m === 'number') { c.m = (c.m&-4)|mark; if (c.constructor !== h$Thread) c.cc.retained++; } else { c.m.m = (c.m.m & -4)|mark; if (c.constructor !== h$Thread) c.cc.retained++; };
+                work[w++] = c.val;;
             } else if(c instanceof h$TVar) {
                 ;
-                if(typeof c.m === 'number') { if (c.m !== (c.m & -4) | mark) { h$updRetained(c); } c.m = (c.m & -4)|mark; } else { if (c.m.m !== (c.m.m & -4) | mark) { h$updRetained(c); } c.m.m = (c.m.m & -4)|mark; };
-                work.push(c.val);
+                if(typeof c.m === 'number') { c.m = (c.m&-4)|mark; if (c.constructor !== h$Thread) c.cc.retained++; } else { c.m.m = (c.m.m & -4)|mark; if (c.constructor !== h$Thread) c.cc.retained++; };
+                work[w++] = c.val;;
             } else if(c instanceof h$Thread) {
                 ;
-                if(typeof c.m === 'number') { if (c.m !== (c.m & -4) | mark) { h$updRetained(c); } c.m = (c.m & -4)|mark; } else { if (c.m.m !== (c.m.m & -4) | mark) { h$updRetained(c); } c.m.m = (c.m.m & -4)|mark; };
-                if(c.stack) work.push.apply(work, c.stack.slice(0, c.sp));
+                if(typeof c.m === 'number') { c.m = (c.m&-4)|mark; if (c.constructor !== h$Thread) c.cc.retained++; } else { c.m.m = (c.m.m & -4)|mark; if (c.constructor !== h$Thread) c.cc.retained++; };
+                if(c.stack) {
+                    for(i=c.sp;i>=0;i--) work[w++] = c.stack[i];;
+                }
             } else if(c instanceof h$Transaction) {
+                /* - the accessed TVar values don't need to be marked
+                   - parents are also on the stack, so they should've been marked already
+                */
                 ;
-                if(typeof c.m === 'number') { if (c.m !== (c.m & -4) | mark) { h$updRetained(c); } c.m = (c.m & -4)|mark; } else { if (c.m.m !== (c.m.m & -4) | mark) { h$updRetained(c); } c.m.m = (c.m.m & -4)|mark; };
-                work.push.apply(work, c.invariants);
-                work.push(c.action);
+                if(typeof c.m === 'number') { c.m = (c.m&-4)|mark; if (c.constructor !== h$Thread) c.cc.retained++; } else { c.m.m = (c.m.m & -4)|mark; if (c.constructor !== h$Thread) c.cc.retained++; };
+                for(i=c.invariants.length-1;i>=0;i--) work[w++] = c.invariants[i];;
+                work[w++] = c.action;;
                 iter = c.tvars.iter();
-                while((ii = iter.next()) !== null) work.push(ii);
-            } else if(c instanceof Array && c.__ghcjsArray) {
-                if(typeof c.m === 'number') { if (c.m !== (c.m & -4) | mark) { h$updRetained(c); } c.m = (c.m & -4)|mark; } else { if (c.m.m !== (c.m.m & -4) | mark) { h$updRetained(c); } c.m.m = (c.m.m & -4)|mark; };
+                while((ii = iter.next()) !== null) work[w++] = ii;;
+            } else if(c instanceof Array && c.__ghcjsArray) { // only for Haskell arrays with lifted values
+                if(typeof c.m === 'number') { c.m = (c.m&-4)|mark; if (c.constructor !== h$Thread) c.cc.retained++; } else { c.m.m = (c.m.m & -4)|mark; if (c.constructor !== h$Thread) c.cc.retained++; };
                 ;
                 for(i=0;i<c.length;i++) {
                     var x = c[i];
-                    if(typeof x === 'object' && x !== null && !((typeof x.m === 'number' && (x.m & 3) === mark) || (typeof x.m === 'object' && ((x.m.m & 3) === mark)))) work.push(x);
+                    if(typeof x === 'object' && x !== null && !((typeof x.m === 'number' && (x.m & 3) === mark) || (typeof x.m === 'object' && ((x.m.m & 3) === mark)))) work[w++] = x;;
                 }
-            } else {
-            }
+            } else if(typeof c === 'object') {
+                ;
+                for(i=h$extensibleRetentionCallbacks.length-1;i>=0;i--) {
+                    var x = h$extensibleRetentionCallbacks[i](c, mark);
+                    if(x === false) continue;
+                    if(x !== true) {
+                        for(j=x.length-1;j>=0;j--) work[w++] = x[j];;
+                    }
+                    break;
+                }
+            } // otherwise: not an object, no followable values
         }
     }
     ;
 }
+// resetThread clears the stack above the stack pointer
+// and shortens the stack array if there is too much
+// unused space
 function h$resetThread(t) {
     var stack = t.stack;
     var sp = t.sp;
@@ -4289,11 +4802,14 @@ function h$resetThread(t) {
     }
     ;
 }
+// throw blocked indefinitely exception to the first thread waiting on an unreferenced MVar
 function h$finalizeMVars() {
     ;
     var i, t, iter = h$blocked.iter();
     while((t = iter.next()) !== null) {
         if(t.status === h$threadBlocked && t.blockedOn instanceof h$MVar) {
+            // if h$unboxFFIResult is the top of the stack, then we cannot kill
+            // the thread since it's waiting for async FFI
             if(t.blockedOn.m !== h$gcMark && t.stack[t.sp] !== h$unboxFFIResult) {
                 h$killThread(t, h$ghcjszmprimZCGHCJSziPrimziInternalziblockedIndefinitelyOnMVar);
                 return t;
@@ -4302,8 +4818,11 @@ function h$finalizeMVars() {
     }
     return null;
 }
+// clear DOM retainers
 function h$finalizeDom() {
+  // fixme
 }
+// reset unreferenced CAFs to their initial value
 function h$finalizeCAFs() {
     if(h$retainCAFs) return;
     var mark = h$gcMark;
@@ -4311,7 +4830,7 @@ function h$finalizeCAFs() {
         var c = h$CAFs[i];
         if(c.m & 3 !== mark) {
             var cr = h$CAFsReset[i];
-            if(c.f !== cr) {
+            if(c.f !== cr) { // has been updated, reset it
                 ;
                 c.f = cr;
                 c.d1 = null;
@@ -4321,10 +4840,240 @@ function h$finalizeCAFs() {
     }
     ;
 }
+/* include/HsBaseConfig.h.  Generated from HsBaseConfig.h.in by configure.  */
+/* include/HsBaseConfig.h.in.  Generated from configure.ac by autoheader.  */
+/* The value of E2BIG. */
+/* The value of EACCES. */
+/* The value of EADDRINUSE. */
+/* The value of EADDRNOTAVAIL. */
+/* The value of EADV. */
+/* The value of EAFNOSUPPORT. */
+/* The value of EAGAIN. */
+/* The value of EALREADY. */
+/* The value of EBADF. */
+/* The value of EBADMSG. */
+/* The value of EBADRPC. */
+/* The value of EBUSY. */
+/* The value of ECHILD. */
+/* The value of ECOMM. */
+/* The value of ECONNABORTED. */
+/* The value of ECONNREFUSED. */
+/* The value of ECONNRESET. */
+/* The value of EDEADLK. */
+/* The value of EDESTADDRREQ. */
+/* The value of EDIRTY. */
+/* The value of EDOM. */
+/* The value of EDQUOT. */
+/* The value of EEXIST. */
+/* The value of EFAULT. */
+/* The value of EFBIG. */
+/* The value of EFTYPE. */
+/* The value of EHOSTDOWN. */
+/* The value of EHOSTUNREACH. */
+/* The value of EIDRM. */
+/* The value of EILSEQ. */
+/* The value of EINPROGRESS. */
+/* The value of EINTR. */
+/* The value of EINVAL. */
+/* The value of EIO. */
+/* The value of EISCONN. */
+/* The value of EISDIR. */
+/* The value of ELOOP. */
+/* The value of EMFILE. */
+/* The value of EMLINK. */
+/* The value of EMSGSIZE. */
+/* The value of EMULTIHOP. */
+/* The value of ENAMETOOLONG. */
+/* The value of ENETDOWN. */
+/* The value of ENETRESET. */
+/* The value of ENETUNREACH. */
+/* The value of ENFILE. */
+/* The value of ENOBUFS. */
+/* The value of ENOCIGAR. */
+/* The value of ENODATA. */
+/* The value of ENODEV. */
+/* The value of ENOENT. */
+/* The value of ENOEXEC. */
+/* The value of ENOLCK. */
+/* The value of ENOLINK. */
+/* The value of ENOMEM. */
+/* The value of ENOMSG. */
+/* The value of ENONET. */
+/* The value of ENOPROTOOPT. */
+/* The value of ENOSPC. */
+/* The value of ENOSR. */
+/* The value of ENOSTR. */
+/* The value of ENOSYS. */
+/* The value of ENOTBLK. */
+/* The value of ENOTCONN. */
+/* The value of ENOTDIR. */
+/* The value of ENOTEMPTY. */
+/* The value of ENOTSOCK. */
+/* The value of ENOTSUP. */
+/* The value of ENOTTY. */
+/* The value of ENXIO. */
+/* The value of EOPNOTSUPP. */
+/* The value of EPERM. */
+/* The value of EPFNOSUPPORT. */
+/* The value of EPIPE. */
+/* The value of EPROCLIM. */
+/* The value of EPROCUNAVAIL. */
+/* The value of EPROGMISMATCH. */
+/* The value of EPROGUNAVAIL. */
+/* The value of EPROTO. */
+/* The value of EPROTONOSUPPORT. */
+/* The value of EPROTOTYPE. */
+/* The value of ERANGE. */
+/* The value of EREMCHG. */
+/* The value of EREMOTE. */
+/* The value of EROFS. */
+/* The value of ERPCMISMATCH. */
+/* The value of ERREMOTE. */
+/* The value of ESHUTDOWN. */
+/* The value of ESOCKTNOSUPPORT. */
+/* The value of ESPIPE. */
+/* The value of ESRCH. */
+/* The value of ESRMNT. */
+/* The value of ESTALE. */
+/* The value of ETIME. */
+/* The value of ETIMEDOUT. */
+/* The value of ETOOMANYREFS. */
+/* The value of ETXTBSY. */
+/* The value of EUSERS. */
+/* The value of EWOULDBLOCK. */
+/* The value of EXDEV. */
+/* The value of O_BINARY. */
+/* The value of SIGINT. */
+/* Define to 1 if you have the `clock_gettime' function. */
+/* #undef HAVE_CLOCK_GETTIME */
+/* Define to 1 if you have the <ctype.h> header file. */
+/* Define if you have epoll support. */
+/* #undef HAVE_EPOLL */
+/* Define to 1 if you have the `epoll_ctl' function. */
+/* #undef HAVE_EPOLL_CTL */
+/* Define to 1 if you have the <errno.h> header file. */
+/* Define to 1 if you have the `eventfd' function. */
+/* #undef HAVE_EVENTFD */
+/* Define to 1 if you have the <fcntl.h> header file. */
+/* Define to 1 if you have the `ftruncate' function. */
+/* Define to 1 if you have the `getclock' function. */
+/* #undef HAVE_GETCLOCK */
+/* Define to 1 if you have the `getrusage' function. */
+/* Define to 1 if you have the <inttypes.h> header file. */
+/* Define to 1 if you have the `iswspace' function. */
+/* Define to 1 if you have the `kevent' function. */
+/* Define to 1 if you have the `kevent64' function. */
+/* Define if you have kqueue support. */
+/* Define to 1 if you have the <langinfo.h> header file. */
+/* Define to 1 if you have libcharset. */
+/* Define to 1 if you have the `rt' library (-lrt). */
+/* #undef HAVE_LIBRT */
+/* Define to 1 if you have the <limits.h> header file. */
+/* Define to 1 if the system has the type `long long'. */
+/* Define to 1 if you have the `lstat' function. */
+/* Define to 1 if you have the <memory.h> header file. */
+/* Define if you have poll support. */
+/* Define to 1 if you have the <poll.h> header file. */
+/* Define to 1 if you have the <signal.h> header file. */
+/* Define to 1 if you have the <stdint.h> header file. */
+/* Define to 1 if you have the <stdlib.h> header file. */
+/* Define to 1 if you have the <strings.h> header file. */
+/* Define to 1 if you have the <string.h> header file. */
+/* Define to 1 if you have the <sys/epoll.h> header file. */
+/* #undef HAVE_SYS_EPOLL_H */
+/* Define to 1 if you have the <sys/eventfd.h> header file. */
+/* #undef HAVE_SYS_EVENTFD_H */
+/* Define to 1 if you have the <sys/event.h> header file. */
+/* Define to 1 if you have the <sys/resource.h> header file. */
+/* Define to 1 if you have the <sys/select.h> header file. */
+/* Define to 1 if you have the <sys/stat.h> header file. */
+/* Define to 1 if you have the <sys/syscall.h> header file. */
+/* Define to 1 if you have the <sys/timeb.h> header file. */
+/* Define to 1 if you have the <sys/timers.h> header file. */
+/* #undef HAVE_SYS_TIMERS_H */
+/* Define to 1 if you have the <sys/times.h> header file. */
+/* Define to 1 if you have the <sys/time.h> header file. */
+/* Define to 1 if you have the <sys/types.h> header file. */
+/* Define to 1 if you have the <sys/utsname.h> header file. */
+/* Define to 1 if you have the <sys/wait.h> header file. */
+/* Define to 1 if you have the <termios.h> header file. */
+/* Define to 1 if you have the `times' function. */
+/* Define to 1 if you have the <time.h> header file. */
+/* Define to 1 if you have the <unistd.h> header file. */
+/* Define to 1 if you have the <utime.h> header file. */
+/* Define to 1 if you have the <wctype.h> header file. */
+/* Define to 1 if you have the <windows.h> header file. */
+/* #undef HAVE_WINDOWS_H */
+/* Define to 1 if you have the <winsock.h> header file. */
+/* #undef HAVE_WINSOCK_H */
+/* Define to 1 if you have the `_chsize' function. */
+/* #undef HAVE__CHSIZE */
+/* Define to Haskell type for cc_t */
+/* Define to Haskell type for char */
+/* Define to Haskell type for clock_t */
+/* Define to Haskell type for dev_t */
+/* Define to Haskell type for double */
+/* Define to Haskell type for float */
+/* Define to Haskell type for gid_t */
+/* Define to Haskell type for ino_t */
+/* Define to Haskell type for int */
+/* Define to Haskell type for intmax_t */
+/* Define to Haskell type for intptr_t */
+/* Define to Haskell type for long */
+/* Define to Haskell type for long long */
+/* Define to Haskell type for mode_t */
+/* Define to Haskell type for nlink_t */
+/* Define to Haskell type for off_t */
+/* Define to Haskell type for pid_t */
+/* Define to Haskell type for ptrdiff_t */
+/* Define to Haskell type for rlim_t */
+/* Define to Haskell type for short */
+/* Define to Haskell type for signed char */
+/* Define to Haskell type for sig_atomic_t */
+/* Define to Haskell type for size_t */
+/* Define to Haskell type for speed_t */
+/* Define to Haskell type for ssize_t */
+/* Define to Haskell type for suseconds_t */
+/* Define to Haskell type for tcflag_t */
+/* Define to Haskell type for time_t */
+/* Define to Haskell type for uid_t */
+/* Define to Haskell type for uintmax_t */
+/* Define to Haskell type for uintptr_t */
+/* Define to Haskell type for unsigned char */
+/* Define to Haskell type for unsigned int */
+/* Define to Haskell type for unsigned long */
+/* Define to Haskell type for unsigned long long */
+/* Define to Haskell type for unsigned short */
+/* Define to Haskell type for useconds_t */
+/* Define to Haskell type for wchar_t */
+/* Define to the address where bug reports for this package should be sent. */
+/* Define to the full name of this package. */
+/* Define to the full name and version of this package. */
+/* Define to the one symbol short name of this package. */
+/* Define to the home page for this package. */
+/* Define to the version of this package. */
+/* The size of `kev.filter', as computed by sizeof. */
+/* The size of `kev.flags', as computed by sizeof. */
+/* The size of `struct MD5Context', as computed by sizeof. */
+/* Define to 1 if you have the ANSI C header files. */
+/* Number of bits in a file offset, on hosts where this is settable. */
+/* #undef _FILE_OFFSET_BITS */
+/* Define for large files, on AIX-style hosts. */
+/* #undef _LARGE_FILES */
 var h$errno = 0;
 function h$__hscore_get_errno() {
   ;
   return h$errno;
+}
+function h$unsupported(status, c) {
+    h$errno = 12456;
+    if(c) c(status);
+    return status;
+}
+function h$strerror(err) {
+    h$ret1 = 0;
+    if(err === 12456) return h$encodeUtf8("operation unsupported on this platform");
+    return h$encodeUtf8(h$errorStrs[err] || "unknown error");
 }
 function h$setErrno(e) {
   ;
@@ -4333,12 +5082,12 @@ function h$setErrno(e) {
       if(es.indexOf('ENOTDIR') !== -1) return 20;
       if(es.indexOf('ENOENT') !== -1) return 2;
       if(es.indexOf('EEXIST') !== -1) return 17;
-      if(es.indexOf('ENETUNREACH') !== -1) return 22;
+      if(es.indexOf('ENETUNREACH') !== -1) return 22; // fixme
       if(es.indexOf('EPERM') !== -1) return 1;
       if(es.indexOf('EMFILE') !== -1) return 24;
       if(es.indexOf('EPIPE') !== -1) return 32;
       if(es.indexOf('EAGAIN') !== -1) return 35;
-      if(es.indexOf('Bad argument') !== -1) return 2;
+      if(es.indexOf('Bad argument') !== -1) return 2; // fixme?
       throw ("setErrno not yet implemented: " + e);
   }
   h$errno = getErr();
@@ -4355,11 +5104,6 @@ var h$errorStrs = { 7: "too big"
                    , 32: "broken pipe"
                    , 35: "resource temporarily unavailable"
                    }
-function h$strerror(err) {
-    ;
-    h$ret1 = 0;
-    return h$encodeUtf8(h$errorStrs[err] || "unknown error");
-}
 function h$handleErrno(r_err, f) {
   try {
     return f();
@@ -4586,6 +5330,7 @@ function h$hs_uncheckedIShiftRA64(a1,a2,n) {
   h$ret1 = num.getLowBits();
   return num.getHighBits();
 }
+// always nonnegative n?
 function h$hs_uncheckedShiftL64(a1,a2,n) {
   n &= 63;
   if(n == 0) {
@@ -4612,14 +5357,21 @@ function h$hs_uncheckedShiftRL64(a1,a2,n) {
     return 0;
   }
 }
+// fixme this function appears to deoptimize a lot due to smallint overflows
 function h$imul_shim(a, b) {
     var ah = (a >>> 16) & 0xffff;
     var al = a & 0xffff;
     var bh = (b >>> 16) & 0xffff;
     var bl = b & 0xffff;
+    // the shift by 0 fixes the sign on the high part
+    // the final |0 converts the unsigned value into a signed value
     return (((al * bl)|0) + (((ah * bl + al * bh) << 16) >>> 0)|0);
 }
 var h$mulInt32 = Math.imul ? Math.imul : h$imul_shim;
+// function h$mulInt32(a,b) {
+//  return goog.math.Long.fromInt(a).multiply(goog.math.Long.fromInt(b)).getLowBits();
+// }
+// var hs_mulInt32 = h$mulInt32;
 function h$mulWord32(a,b) {
   return goog.math.Long.fromBits(a,0).multiply(goog.math.Long.fromBits(b,0)).getLowBits();
 }
@@ -4646,6 +5398,7 @@ function h$wordAdd2(a,b) {
   h$ret1 = c.getLowBits();
   return c.getHighBits();
 }
+// this does an unsigned shift, is that ok?
 function h$uncheckedShiftRL64(a1,a2,n) {
   if(n < 0) throw "unexpected right shift";
   n &= 63;
@@ -4713,20 +5466,21 @@ function h$decodeDouble2Int(d) {
    var exponent = h$integer_cmm_decodeDoublezh(d);
    var significand = h$ret1;
    var sign = d<0?-1:1;
-   h$ret1 = significand.shiftRight(32).intValue();
+   h$ret1 = significand.shiftRight(32).intValue(); // correct sign?
    h$ret2 = significand.intValue();
    return sign;
 }
+// round .5 to nearest even number
 function h$rintDouble(a) {
   var rounda = Math.round(a);
   if(a >= 0) {
-    if(a%1===0.5 && rounda%2===1) {
+    if(a%1===0.5 && rounda%2===1) { // tie
       return rounda-1;
     } else {
       return rounda;
     }
   } else {
-    if(a%1===-0.5 && rounda%2===-1) {
+    if(a%1===-0.5 && rounda%2===-1) { // tie
       return rounda-1;
     } else {
       return rounda;
@@ -4783,14 +5537,16 @@ function h$bswap64(x1,x2) {
   h$ret1 = (x1 >>> 24) | (x1 << 24) | ((x1 & 0xFF00) << 8) | ((x1 & 0xFF0000) >> 8);
   return (x2 >>> 24) | (x2 << 24) | ((x2 & 0xFF00) << 8) | ((x2 & 0xFF0000) >> 8);
 }
-h$printRanges = "f|!-f=|/q'--1$J|(]5p'1q&/| 73Y--EO'|$9| ('| ?'|!9?| ?-| %'AZ'|#V|!`0(2'''O0$)+'5'''+3*','O-).+''O0&&&'$-+''))0+$1C9)4(N0&,'7(('@+'7$A)2'''O0&,'5''')3'+','G7'.))*)'$&)')));+-))*'.>M/)2(P6,)3(*1'&/+'733''2(P6,'5(*1'1$+'7&A'2(u'3(,32+'C)1''F)S4$'1)*/$2G);| =+^n'$''$'.+0( #''<('-$.'7''h| Yk+rk@<n|$G7| #)|'?*'1$*'v*'f*'1$*'A| :*'| O'd)W/| t9|.r)| lA=09Q5K;=(&;| 1't'7/7/A6/| z3z-| U7^);+;+(x'-9|  +W/9)| E'| K]'9/7/?| n| b+| #)z);/| 13| A)A)| /| jj=|%/M|&;'/'p'/'3 $a'| 3@>'/H')48-S1| +C''Y<)WOfA|#)/|-Y;rU9M|.x|$N$|3s)7|#b| '| &|#81| #7| 55'?S510000000| m| fW| {;|$hW;+| I| u'|!=-v)|!+y-l;| '|$y} ^y7}%0h| 1|9t)| 75|'fK| 13[3| z3|#3&?7| j| -+7/| 93| S5;/[+| r9`)| f8+'d| 75?'7'd+| OS-f/'/'/510|#7| %'7/}!e;;Q+| +}!'n|&d'| E'|!Cp1;--W,$&&|!gE|(-C| I'| 5t?'W/15jH*+-|#!+|$7)/'/'/'))10='';VH&@'?h|!f-)+| #)| r-;| 1| %|!t^)| +| 'b*;Y| 3`m+?x|#Q'7|3 /'$|  &)&Q4|#U[)Y-|$:+&-3(X+)+5351d|!p| 5)^'Y-3|!p| [|+tb|(U| f+`C| C*|wd|3S|#7|!5=+|bb|7l}#8j|,^}$Dz'}!!#|%M7r'| ^3|!5h| U|$/| x5G|#1| t| V&'&''+:$0| J*'30Z*,$)1|'T'|&O'| -} NS|  +|!7;A'?'A@d9-b| </z| `^=z-51'|#rfA/| T)K;n,MEA| G$|$&*)| EGS|#;-B( $(.'+$'+:+9| )| U| =|!W|P[}*Q/v} !59|$x}$#I|,'#,|3U|%A";
-h$alnumRanges = "| +71W/W| '0'$)'(Pa|*2+;?-1$D|!Y&'+3$)$J| o|#*|#_5p'0r5| #$&&$3Y-)^9-| ^+|!;2'7H'B| ?'|!9?| 5+,| %G[|#^|!7'700(2'''O0$)+'5'''+3*',';'/1).+''O0&&&'$-+''))0+$1C9)4(N0&,'7(('@+'7E)2'''O0&,'5''')3'+','707'.))*)'$&)')));+-))*'.>=?)2(P6,)3(*1'&/+'731)'2(P6,'5(*1'1$+'7&A'2(u'3(,32+'C+/''F)S4$'1)*/$2G'=| =-A6r'$''$'.+0( #''<('-$.'7''hP'/K $+7k+KFk5| :| ^/| f'p7z$)|'?*'1$*'v*'f*'1$*'A| :*'| O')5K)CC| t;|-j'EV-| `))A=09M9K;=(&;| 1'`)*''7/7E)'7/| z3z-| U7^);+;7t'-9|  +W/9n[+| G]'9/7=| y| b+7E5;z);/| 1;| 937)| +| n)a=|%/M|&;'/'p'/'3 $a'| 30$))0)+'/+=-)0|!U''/-9/=| /fE*&7$)-/ $+8'+--+$| =|0/| A| fO|.#`|91| '| &|!y/19&p7| 55@S510000000c| '|*H)UA,'-+| v''')|!!*-v)|!+)+7Y| 3Cd7rAd7rA|'-} X;| ^}%/A| 1|9t| O| %'|& )[K| /5'T3| nn5'|!='+&?7| j| %3/7| 1;| S97/S)*| %'l;^)| K?9p| 75?'7/Q)'+| OS)j/'/'/510|#7z&'7/}!e;;Q+| +}!'n|&d'| E'|!Cp1;--;<,$&&|!Ff|()G| I'| 5t;+CC1| [-|#!I71W/W9|! )/'/'/')j;VH&@'?h|!f;| #;| ;E|!R|!s^)| +| 'b*;Y| 3`'l+3,x|#Q'7|3 /'$|  &)&Q'3|#U[+W|$G+&-3(X+)+5Sb|!r| 57O'Y-3|!p| [|+tb|(U| W9`C| ?|wr|3S|#7|!5|c)|7l}#8j|,^}$Dz'}!)x-)/33'1`+|#=)|&=G|#1| t| V&'&''+:$0| J*'30Z*,$)1|'T'UTaTaTaTaT2'| -} T79|v+}*Q/v} !59|$x}$#I|,'#,|3U|%A";
-h$lowerRanges = "|!3W| '6*kS2 <& (& 8' #)'$&('+&()'& #&$'$'($&'')/&& )' )&'$( >1'&'$+ %| SX|$=$(()GXj&)) ,,$'&'| /| ) 25 ;& '' M| ;r} KQ|  | 5Og|!; l5 Q43/73333/73333?'333333-&/()&3+''337)&|&+(')X**&'3++| 2|]a| ''(' $+$'0+ R'1$Dp}'Zz 7H ,|#* ') @2 #' %*$&@ %| i}%6<1;-|7`W|;?t}-,+WW1FWWW+$08WWWWWWWWWWWWWWWWW[[U.WU.WU.WU.WU.$";
-h$upperRanges = "| MW|!9Q0f <& (& 8' #)'$&('+&()'& #&$'$'($&)0'&& )' )&'$( >1'&'$+ %|&I$(@$)$&D4j&)) ,,&$''| /| ) 14 <' '' L6p|a5p|l9 l4 Q433/73333/9 $23S333333-9-9+;-9-|%l*()')'(-/ $+'+7'-| B|[]| '| +$)' $+$'2) R3$}']2 7H ,|#* '( ?6 #' %+$&@ %}%OXW|;/t}-,GWWWWWW$''&''+2WWW'*'30Y'*,$)1YWWWWWWWWWWW`UfUfUfUfUf%";
-h$alphaRanges = "| MW/W| '6*,Qa|*2+;?-1$|!q-&'+3$)$J| o|#*3|#Q5p'0r| YY-)| #zj'|!4$A'1'7)'B$`^|! 9Rf5'+,O+4(PU|#l| 5)F07A10-3'''O0$)+)B<'(?'I/+''O0&&&b+$I)C5(N0&,)F@'j3'''O0&,)_'(AD$/))*)'$&)')));O| 03(P6,)V'/'j3(P6,)c$'A'G3(u'BD'S/-G)S4$'1| =| )&;1| ='$''$'.+0( #''*&5&-$M'h| F3kY-|!UzKB/++)('1)+=;Dp7z$)|'?*'1$*'v*'f*'1$*'A| :*'| OnCC| t;|-j'EV-| `M=*?G?G?=(A| 1j*| N| z3v$-| U7^| /`'-9|  M1| 9Q5| 3| n|!(| 'E1| 7`='CpWlv)7l|!E+*?|$;| I|&3'/'p'/'3 $a'| 30$))0)+'/+=-)0|!W<B=|!9*&7$)-/ $+8'+--+| 0'|[[| '| &|!y/+Ep7| 55BQ510000000| j|*H'x--'+| v/)|!!*-v)|!+EY| 3C|+E} X;| ^}%/A| 1|9t| O| %'|& )C7'K| 'CU3| U| +5'|!='+&?7| j3(*P^| 1?| -| E/)>[7QU^1| '[| (vQ)2KQ),| )$)''-'$R)j/'/'/510|#7j^}!e;;Q+| +}!'n|&d'| E'|!Cp1;--$7<,$&&|!Ff|()G| I'| 5t;|!W-|#!lW/W9|! )/'/'/')j;VH&@'?h|!f|(^^)| +| 'bEE2| 5`'l+3| )|#Q|39/'$|  &)&Q|#jO7W|$G@+(X|  ^|!v| 57O7I|#/| [|55| 3| `| #|x-|3S|hO|7l}#8j|,^}$Dz'}!8h| t| V&'&''+:$0| J*'30Z*,$)1|'T'UTaTaTaTaT2}!Pd}*Q/v} !59|$x}$#I|,'";
-h$toLowerMapping = "| K Wb|!9 Qb!1bf  9#  !|$F  ## &'  (# &'  8#  !|!_# # #)  !|$^# ! # ! |$U !# '|$S&'  !| f|$M !|$O# ! |$S !|$W  !|$`|$[&)  !|$`|$d ! |$f $#  !|$n# ! |$n'  !#  !|$n#!'|$l ##  !|$p#) &1  !%# ! % !#  !%# ) #'  )# &'  !%# ! # ! |!. !| 6# 4 # ! |!q * #1  !}![r# ! |#X}%=]'  !#  !|$>| Q !| U# % #|&I  !# &) &A  !n )l ! | G!'| E!Eb!5bj B3  ,# &- |!]'  !#  !.#' )|!qC| hdb| )  1# &5  <#  !?# ' #'  L# &7 p| '|a5 p} hG|l9  l# &5  !} p4  P# &5 303 /07 303 303 /09  $0 @3 30S 303 303 303 '0'| ZD9 +| sD9 '0'|!4; '0'|!L<9 '|!m'|!iD|&Y }#a()  !}!&:}!#V/ | 8| # CAI &|23 WU|Ht | '| '| +  !#  !}!Zc|ue}%:e'  $#  !}![R}!Zo !}![X}![V ! #' &3 '}!]> R# &3  !# &}']3  7# &I  ,# &|#+  '# &)  ?# &7  ##  !}(b.# % #+  !# }4p*' &A  %# &}%OY Wb|;/ tr#0}'wA ";
-h$toUpperMapping = "|!1 Wa| = |A$x Qa!1a !|!`  9!  !|%.  #! $'  (! $'  7! $'  #!  !!|&]|(_'  !! $' $) $- $' |$>)  !!|#Y) |%i'  #! $' $+ $' $)  !! $' $)  !! |!N-  !!$ ! ! !$  !!$ ) ! !| e  )! $'  !!$ ! !)  4! $)  )! $3 $' '}!]? ! !+  %!  !!}![Y !}![S}![W !|$]|$T!'|$R ! |$L ! |$N+ |)*'  !|$V }4p,'  !|$Z|$_ ! }!Zd)  !|$_  !}!Zp|$c' |)N1 }%:g' |)_' |)_+  !|$m| P'|$k|#.- |)c|#z |#ez  !! $) $) )|!r| % | _)k!Ea| B5a|!m'| D ! | B|!P)  !| $| 2 !0  ,!  !!| s !| g/' |$8' $' $| 1 daC| g 2 !5  ;! $'  '!  !!> M !| ; p| &} N7 }1H>) } pP|!v  l! $- |!X-  P! $313 /17 313 313 /19  $1 B3 313 '| [+| t'|!5'|!n'|!M'|!j' 313 313 313 '1 ! 37 }#R4+ F; '1? '1) >= F|'b | 6f C@+ $|2f WT|IE | '| &' $)  !}![q}![k $ !/ $' $7  R! $3  !! $E p} hF}'Zz  7! $I  ,! $|#+  '! $)  ?! $7  !! $'  %! $+ $+ $A  %! $}%P= Wa|;? tq#0}'vt ";
-h$catMapping = "d;P)3J)3 !/0 !34 !3.'37*'3)4'3W! !/3 !06 !-6W# !/4 !04f; !83+5'7 !67 !#1 !4< !76 !74', !6# !73 !6, !#2),FQ!H1!S#H3# <!#$'# (!#$'# 8!#'! ##!)#'! !#!&'!&)!'#+!&'!&)!)#'!&'! ##!&'! !#!'# !!#'!&)! !#!&'!'# !&!)#+& !!$ !#! !$# !!$ )#!'# )!#$'# !!$ !#!&)! >#!1#'!&'!'# !!#+! %#!| S#,Y#G%+6;%?6-%16 !%6*E6|!O' #!# !%6 !!#' *)#F- '6 !!3)! ! !!'!&E!!5!j#$'#)!)# ,!#$-# !!# !4!&'!'#| /!| )# 2!#N-'') <!#'! '#!'# M!#5 p!' */3!r# ! 3</ | #' !.'F''F'' !3'3 Y&- )&'39 +<' )4'3J'3'79'F' '3d&*7&M'7*+3'&.|!5& !3&1' !<7/''%''N+''&7*)&'7,?3 ! < !&'`&Y'' |! &9',? 7*f&5''%N)3*- O&+'*5'*)'*-'' A3!U&)'' F|#W )'0| 5& !'( !'&)(3'+(.'(,1'7&'''37* !3%/&!1& ! ''(!3&' '&' O&!1& ! &) +&'  !'&)(+'' '(' '( !'&3 0+ '&!)&''' 7*'&'5/, !75- '' !( /&+ '&' O&!1&!'&!'&!'&'  !' )(''+ ''' )') .1 +& ! &1 7*'')&.9 '' !( 5&!)&!O&!1&!'&!-&'  !'&)(-'!'' !( '(.' ,A '&''' 7* ! 5A .'(!3&' '&' O&!1&!'&!-&'  !'& !('0+'' '(' '(.3  !'(+ '&!)&''' 7* !7&/,7  !'&!/&) )&!+&) '& ! &!'&) '&) )&) ;&+ '(.'() )(!)(.' ,/ 0? 7*),/7 !57/ )(!3&!)&!Q&!7&!-&) ,)'+(!)'!+'1 ''!'&/ '&''' 7*3 1,N' '(!3&!)&!Q&!7&!-&'  !'& !('-( ! ''(!'(''1 '(1  !& '&''' 7*!'&A '(!3&!)&!v&' ,)(+'!)(!)( !'&3 03 '&''' 7*/,) N/&' '(!G&) S&!5& ! &' 1&) .+ )()' ! '!3(G '(F; | )&.'&1'+ J/&*3'F7*'3n '& ! &' '& ! &' ,/ +&!1&!)& # &' '&!+&.'&/'!'',' -& ! %!/'' 7*' '&h ,)7A3-7''/77*7, $7' #/0'(3&!l&+ ?'0-'F''-&9'!l'!37./7!'7-3+7'3n z&'(+'0/'0'''('',7*/3/&'(''+&)',)('&1()&+'=&.'(''/( !'&07*)(.'7p!7 z& !3%) |'?&!+&' 1& ! &!+&' v&!+&' f&!+&' 1& ! &!+&' A&!| ;&!+&' | O&' )'N33K,) C&77/ | t&9 <|-j&'3E&PW& !/0) | `&)3)+A =&!+&)'9 G&)''35 G&''; =&!)&!''; | 1&'<01'3(.'(9')3*)3 !5&.' 7*/ 7,/ /3<+3)' !8 7*/ j&*| 1&3 v& !'&- | U&7 ^&) )'+('')(+ '(./()'+ N) '37*`&' -&9 |  &+ E(1&'(/ 7*8) h7Q&'')(' '3| 3& !('01' ! ' !(''(3'/(7'' .7*/ 7*/ 13*/3| n +'0| '& !'(-' !('-(.'(1&+ 7*13775'57) ''0`&0+''(''0) '&7*/ p& !'('')( !'()''(3 +3l&3(3''('') -37*) )&7*`&/%'3| j )'F='01'+&.+&0= |  #| 5%O#*h#n%r'M +' l!#$5# Q!#$5#3!/#' /!' 3#3!3#3!/#' /!' 3# % !3#3!?#' 3#3$3#3$3#3$-#!'#+! !$6&)6)#!'#+!()6+#' '#+!!)63#-!)6' )#!'#+!('6!98-</.'3 !12>'1 !2/B33 !9:-<P53 !12+3'-)3 !4/@93 !43:73P-<- /< !,%' /,)4 !/0*7,)4 !/0!=%) W5O ='+).));'A '7$+7$'7&)!'#)! !#7$'7H-!/7 $!7+! !7#+!&+&&'7'#'!-4$+# !74'7 !#7C,j+ !!#++8/ -4-7'4+7H'7H'7H17Hb7'4'7 !47Hb7|%z437+4K7'417 !/0| l7H`7U4t7/4G7; r7U 97M | A,| f7O,|$)7H57H| 5734|!M7H|#57!|!=7 (/0`,|  7-4 !/0+4 ! 4!S4 &/0C4|%b7|!v4 ,/0| G4 #/0d4 !/0|%f4| )7M4'7/4) 77|#b | '!!| '# ! !&)!'# $!#+! !#!'#$1#*)! R#!'#/7 #!#)'1 +38'3p#7 | 5&5  !%3? .Q&5 1&!1&!1&!1&!1&!1&!1&!1&!d''3 #12)3 !12 !31D53<'3 !.3 !12'3 !12 %/0-3*'3| f W7!|! 7; |$h7W ;7+ P)3 !7% !&+ &/0'7 %/0 !./'0N5+/'<-%'7)+ !%&F'7!| v&' '''6'% !&.|!#&F)%,- v&) |!+&!'7+,77Y&- l7; C&b7!7,r7A,d77,r7A,| G7!|%b7} X;&7 | I7}%/A&| 1 M&*|9G&) | 775 t&/%'3|%z&*)3C&7*'&K  8!# !&'))F3 '' !3% -!#3 | U&7+''/33 Q65%'6 '!#$)# @!#*3# #!#'! %#! !#%'6 #!# ! !&?  &!#| j &1&.)&.+&.Q&'(''0+7+ /,'7 !57/ | 1&+33 '(| -&C(.5 '37*/ G'/&)3,+ 7*[&3''3Q&9''(9 F^&) )'0| '&.'(+''(.+(=3 ! %7*+ '3d v&/''('''(''5 )&.3& !'(' 7*' +3C&*/&)7 !&(+ | )& !'&)''&''-&'' !&',S '&*'3f /&' /&' /&5 1&!1&|#7 j&'(.'(.'( !3(.' 7*/ }!e;&; Q&+ | +&+ |MQ=} T7 |&d&' | E&' |!C&p 1#; -#-  !&'7&H=&!-& ! &!'&!'&!|!G&C6E |()& !/0C | I&' | 5&t ;& !57' C'13 !/0F/ 1'5 F'.'- )/0'3 !/0+3)-)3!+3 !./ #0/@)3 !4.)4 ! 3J'3+ -&!|##&'  !< )3J)3 !/0 !34 !3.'37*'3)4'3W! !/3 !06 !-6W# !/4 !04 !/0 !3/@'37&*| #&'%b&) /&' /&' /&' )&) '5 !46N'5 ! 7+4'77 )<'7' ;&!W&!I&!'&!A&' ?&h |!f&- '3N+ | #,) 57| 3++,E78- ;7| 1 | #7.|!t ^&) | +&| ' b&!+,; E&63&6| 3 `& ! 3l&+ 3&F-+x t!t#| f&' 7*|3  /&'  !& |  &!'&) ,' Q& ! 33,|#U O&/,) FW&- F|$; ,)'!''- +'+&!)&!Y&+ )'+ .3,3 531 ^&',F|!p | 5&) 13O&' 3,I&- 3,|!p | [&|+t b,|(U  !('0| 3&A'13+ K,7*C ''0| #&)(+''('''3X+3|wd |3S&|#7 |!5+= +3|bb |7l&}#8j |,^&}$Dz '&}!!# |%M77 r7' | A7'()')7/(3<3''71'`7+'| )7h | M7)'N|$/ | x75 G,|#1 W!W#W!1#!G#W!W# !! '!' $' '!' +!!3!+# ! #!1#!9#W!W#'!!+!' 3!!1!!W#'!!+!!-! ! !) 1!!W#W!W#W!W#W!W#W!W#W!W#W![#' U!HU#H/#U!HU#H/#U!HU#H/#U!HU#H/#U!HU#H/# !!#' | -*} NS |  7+ |!77; A7' ?7' A7!A7d 9,- b7!| =7/ z7| ` ^7= z7- 571 '7|#r f7A /7!| U7) K7; n7!-7M E7A | G7 ! 7!|$'7!+7) | E7G S7|#; -7!C7!)7 $ 7!)7!/7' +7 ! 7' +7!;7+ 97| ) | U7| = |!W7|P[ }*Q/&v } !5&9 |$x&}$#I |,'&#,|0e X` |!/<|!p |%A'}PF' ";
+// Unicode tables generated by ghcjs/utils/genUnicode.hs
+var h$printRanges = "f|!-f=|/q'--1$J|(]5p'1q&/| 73Y--EO'|$9| ('| ?'|!9?| ?-| %'AZ'|#V|!`0(2'''O0$)+'5'''+3*','O-).+''O0&&&'$-+''))0+$1C9)4(N0&,'7(('@+'7$A)2'''O0&,'5''')3'+','G7'.))*)'$&)')));+-))*'.>M/)2(P6,)3(*1'&/+'733''2(P6,'5(*1'1$+'7&A'2(u'3(,32+'C)1''F)S4$'1)*/$2G);| =+^n'$''$'.+0( #''<('-$.'7''h| Yk+rk@<n|$G7| #)|'?*'1$*'v*'f*'1$*'A| :*'| O'd)W/| t9|.r)| lA=09Q5K;=(&;| 1't'7/7/A6/| z3z-| U7^);+;+(x'-9|  +W/9)| E'| K]'9/7/?| n| b+| #)z);/| 13| A)A)| /| jj=|%/M|&;'/'p'/'3 $a'| 3@>'/H')48-S1| +C''Y<)WOfA|#)/|-Y;rU9M|.x|$N$|3s)7|#b| '| &|#81| #7| 55'?S510000000| m| fW| {;|$hW;+| I| u'|!=-v)|!+y-l;| '|$y} ^y7}%0h| 1|9t)| 75|'fK| 13[3| z3|#3&?7| j| -+7/| 93| S5;/[+| r9`)| f8+'d| 75?'7'd+| OS-f/'/'/510|#7| %'7/}!e;;Q+| +}!'n|&d'| E'|!Cp1;--W,$&&|!gE|(-C| I'| 5t?'W/15jH*+-|#!+|$7)/'/'/'))10='';VH&@'?h|!f-)+| #)| r-;| 1| %|!t^)| +| 'b*;Y| 3`m+?x|#Q'7|3 /'$|  &)&Q4|#U[)Y-|$:+&-3(X+)+5351d|!p| 5)^'Y-3|!p| [|+tb|(U| f+`C| C*|wd|3S|#7|!5=+|bb|7l}#8j|,^}$Dz'}!!#|%M7r'| ^3|!5h| U|$/| x5G|#1| t| V&'&''+:$0| J*'30Z*,$)1|'T'|&O'| -} NS|  +|!7;A'?'A@d9-b| </z| `^=z-51'|#rfA/| T)K;n,MEA| G$|$&*)| EGS|#;-B( $(.'+$'+:+9| )| U| =|!W|P[}*Q/v} !59|$x}$#I|,'|G1|%A";
+var h$alnumRanges = "| +71W/W| '0'$)'(Pa|*2+;?-1$D|!Y&'+3$)$J| o|#*|#_5p'0r5| #$&&$3Y-)^9-| ^+|!;2'7H'B| ?'|!9?| 5+,| %G[|#^|!7'700(2'''O0$)+'5'''+3*',';'/1).+''O0&&&'$-+''))0+$1C9)4(N0&,'7(('@+'7E)2'''O0&,'5''')3'+','707'.))*)'$&)')));+-))*'.>=?)2(P6,)3(*1'&/+'731)'2(P6,'5(*1'1$+'7&A'2(u'3(,32+'C+/''F)S4$'1)*/$2G'=| =-A6r'$''$'.+0( #''<('-$.'7''hP'/K $+7k+KFk5| :| ^/| f'p7z$)|'?*'1$*'v*'f*'1$*'A| :*'| O')5K)CC| t;|-j'EV-| `))A=09M9K;=(&;| 1'`)*''7/7E)'7/| z3z-| U7^);+;7t'-9|  +W/9n[+| G]'9/7=| y| b+7E5;z);/| 1;| 937)| +| n)a=|%/M|&;'/'p'/'3 $a'| 30$))0)+'/+=-)0|!U''/-9/=| /fE*&7$)-/ $+8'+--+$| =|0/| A| fO|.#`|91| '| &|!y/19&p7| 55@S510000000c| '|*H)UA,'-+| v''')|!!*-v)|!+)+7Y| 3Cd7rAd7rA|'-} X;| ^}%/A| 1|9t| O| %'|& )[K| /5'T3| nn5'|!='+&?7| j| %3/7| 1;| S97/S)*| %'l;^)| K?9p| 75?'7/Q)'+| OS)j/'/'/510|#7z&'7/}!e;;Q+| +}!'n|&d'| E'|!Cp1;--;<,$&&|!Ff|()G| I'| 5t;+CC1| [-|#!I71W/W9|! )/'/'/')j;VH&@'?h|!f;| #;| ;E|!R|!s^)| +| 'b*;Y| 3`'l+3,x|#Q'7|3 /'$|  &)&Q'3|#U[+W|$G+&-3(X+)+5Sb|!r| 57O'Y-3|!p| [|+tb|(U| W9`C| ?|wr|3S|#7|!5|c)|7l}#8j|,^}$Dz'}!)x-)/33'1`+|#=)|&=G|#1| t| V&'&''+:$0| J*'30Z*,$)1|'T'UTaTaTaTaT2'| -} T79|v+}*Q/v} !59|$x}$#I|,'|G1|%A";
+var h$lowerRanges = "|!3W| '6*kS2 <& (& 8' #)'$&('+&()'& #&$'$'($&'')/&& )' )&'$( >1'&'$+ %| SX|$=$(()GXj&)) ,,$'&'| /| ) 25 ;& '' M| ;r} KQ|  | 5Og|!; l5 Q43/73333/73333?'333333-&/()&3+''337)&|&+(')X**&'3++| 2|]a| ''(' $+$'0+ R'1$Dp}'Zz 7H ,|#* ') @2 #' %*$&@ %| i}%6<1;-|7`W|;?t}-,+WW1FWWW+$08WWWWWWWWWWWWWWWWW[[U.WU.WU.WU.WU.$";
+var h$upperRanges = "| MW|!9Q0f <& (& 8' #)'$&('+&()'& #&$'$'($&)0'&& )' )&'$( >1'&'$+ %|&I$(@$)$&D4j&)) ,,&$''| /| ) 14 <' '' L6p|a5p|l9 l4 Q433/73333/9 $23S333333-9-9+;-9-|%l*()')'(-/ $+'+7'-| B|[]| '| +$)' $+$'2) R3$}']2 7H ,|#* '( ?6 #' %+$&@ %}%OXW|;/t}-,GWWWWWW$''&''+2WWW'*'30Y'*,$)1YWWWWWWWWWWW`UfUfUfUfUf%";
+var h$alphaRanges = "| MW/W| '6*,Qa|*2+;?-1$|!q-&'+3$)$J| o|#*3|#Q5p'0r| YY-)| #zj'|!4$A'1'7)'B$`^|! 9Rf5'+,O+4(PU|#l| 5)F07A10-3'''O0$)+)B<'(?'I/+''O0&&&b+$I)C5(N0&,)F@'j3'''O0&,)_'(AD$/))*)'$&)')));O| 03(P6,)V'/'j3(P6,)c$'A'G3(u'BD'S/-G)S4$'1| =| )&;1| ='$''$'.+0( #''*&5&-$M'h| F3kY-|!UzKB/++)('1)+=;Dp7z$)|'?*'1$*'v*'f*'1$*'A| :*'| OnCC| t;|-j'EV-| `M=*?G?G?=(A| 1j*| N| z3v$-| U7^| /`'-9|  M1| 9Q5| 3| n|!(| 'E1| 7`='CpWlv)7l|!E+*?|$;| I|&3'/'p'/'3 $a'| 30$))0)+'/+=-)0|!W<B=|!9*&7$)-/ $+8'+--+| 0'|[[| '| &|!y/+Ep7| 55BQ510000000| j|*H'x--'+| v/)|!!*-v)|!+EY| 3C|+E} X;| ^}%/A| 1|9t| O| %'|& )C7'K| 'CU3| U| +5'|!='+&?7| j3(*P^| 1?| -| E/)>[7QU^1| '[| (vQ)2KQ),| )$)''-'$R)j/'/'/510|#7j^}!e;;Q+| +}!'n|&d'| E'|!Cp1;--$7<,$&&|!Ff|()G| I'| 5t;|!W-|#!lW/W9|! )/'/'/')j;VH&@'?h|!f|(^^)| +| 'bEE2| 5`'l+3| )|#Q|39/'$|  &)&Q|#jO7W|$G@+(X|  ^|!v| 57O7I|#/| [|55| 3| `| #|x-|3S|hO|7l}#8j|,^}$Dz'}!8h| t| V&'&''+:$0| J*'30Z*,$)1|'T'UTaTaTaTaT2}!Pd}*Q/v} !59|$x}$#I|,'";
+var h$toLowerMapping = "| K Wb|!9 Qb!1bf  9#  !|$F  ## &'  (# &'  8#  !|!_# # #)  !|$^# ! # ! |$U !# '|$S&'  !| f|$M !|$O# ! |$S !|$W  !|$`|$[&)  !|$`|$d ! |$f $#  !|$n# ! |$n'  !#  !|$n#!'|$l ##  !|$p#) &1  !%# ! % !#  !%# ) #'  )# &'  !%# ! # ! |!. !| 6# 4 # ! |!q * #1  !}![r# ! |#X}%=]'  !#  !|$>| Q !| U# % #|&I  !# &) &A  !n )l ! | G!'| E!Eb!5bj B3  ,# &- |!]'  !#  !.#' )|!qC| hdb| )  1# &5  <#  !?# ' #'  L# &7 p| '|a5 p} hG|l9  l# &5  !} p4  P# &5 303 /07 303 303 /09  $0 @3 30S 303 303 303 '0'| ZD9 +| sD9 '0'|!4; '0'|!L<9 '|!m'|!iD|&Y }#a()  !}!&:}!#V/ | 8| # CAI &|23 WU|Ht | '| '| +  !#  !}!Zc|ue}%:e'  $#  !}![R}!Zo !}![X}![V ! #' &3 '}!]> R# &3  !# &}']3  7# &I  ,# &|#+  '# &)  ?# &7  ##  !}(b.# % #+  !# }4p*' &A  %# &}%OY Wb|;/ tr}qZ/ ";
+var h$toUpperMapping = "|!1 Wa| = |A$x Qa!1a !|!`  9!  !|%.  #! $'  (! $'  7! $'  #!  !!|&]|(_'  !! $' $) $- $' |$>)  !!|#Y) |%i'  #! $' $+ $' $)  !! $' $)  !! |!N-  !!$ ! ! !$  !!$ ) ! !| e  )! $'  !!$ ! !)  4! $)  )! $3 $' '}!]? ! !+  %!  !!}![Y !}![S}![W !|$]|$T!'|$R ! |$L ! |$N+ |)*'  !|$V }4p,'  !|$Z|$_ ! }!Zd)  !|$_  !}!Zp|$c' |)N1 }%:g' |)_' |)_+  !|$m| P'|$k|#.- |)c|#z |#ez  !! $) $) )|!r| % | _)k!Ea| B5a|!m'| D ! | B|!P)  !| $| 2 !0  ,!  !!| s !| g/' |$8' $' $| 1 daC| g 2 !5  ;! $'  '!  !!> M !| ; p| &} N7 }1H>) } pP|!v  l! $- |!X-  P! $313 /17 313 313 /19  $1 B3 313 '| [+| t'|!5'|!n'|!M'|!j' 313 313 313 '1 ! 37 }#R4+ F; '1? '1) >= F|'b | 6f C@+ $|2f WT|IE | '| &' $)  !}![q}![k $ !/ $' $7  R! $3  !! $E p} hF}'Zz  7! $I  ,! $|#+  '! $)  ?! $7  !! $'  %! $+ $+ $A  %! $}%P= Wa|;? tq}qY9 ";
+var h$catMapping = "d;P)3J)3 !/0 !34 !3.'37*'3)4'3W! !/3 !06 !-6W# !/4 !04f; !83+5'7 !67 !#1 !4< !76 !74', !6# !73 !6, !#2),FQ!H1!S#H3# <!#$'# (!#$'# 8!#'! ##!)#'! !#!&'!&)!'#+!&'!&)!)#'!&'! ##!&'! !#!'# !!#'!&)! !#!&'!'# !&!)#+& !!$ !#! !$# !!$ )#!'# )!#$'# !!$ !#!&)! >#!1#'!&'!'# !!#+! %#!| S#,Y#G%+6;%?6-%16 !%6*E6|!O' #!# !%6 !!#' *)#F- '6 !!3)! ! !!'!&E!!5!j#$'#)!)# ,!#$-# !!# !4!&'!'#| /!| )# 2!#N-'') <!#'! '#!'# M!#5 p!' */3!r# ! 3</ | #' !.'F''F'' !3'3 Y&- )&'39 +<' )4'3J'3'79'F' '3d&*7&M'7*+3'&.|!5& !3&1' !<7/''%''N+''&7*)&'7,?3 ! < !&'`&Y'' |! &9',? 7*f&5''%N)3*- O&+'*5'*)'*-'' A3!U&)'' F|#W )'0| 5& !'( !'&)(3'+(.'(,1'7&'''37* !3%/&!1& ! ''(!3&' '&' O&!1& ! &) +&'  !'&)(+'' '(' '( !'&3 0+ '&!)&''' 7*'&'5/, !75- '' !( /&+ '&' O&!1&!'&!'&!'&'  !' )(''+ ''' )') .1 +& ! &1 7*'')&.9 '' !( 5&!)&!O&!1&!'&!-&'  !'&)(-'!'' !( '(.' ,A '&''' 7* ! 5A .'(!3&' '&' O&!1&!'&!-&'  !'& !('0+'' '(' '(.3  !'(+ '&!)&''' 7* !7&/,7  !'&!/&) )&!+&) '& ! &!'&) '&) )&) ;&+ '(.'() )(!)(.' ,/ 0? 7*),/7 !57/ )(!3&!)&!Q&!7&!-&) ,)'+(!)'!+'1 ''!'&/ '&''' 7*3 1,N' '(!3&!)&!Q&!7&!-&'  !'& !('-( ! ''(!'(''1 '(1  !& '&''' 7*!'&A '(!3&!)&!v&' ,)(+'!)(!)( !'&3 03 '&''' 7*/,) N/&' '(!G&) S&!5& ! &' 1&) .+ )()' ! '!3(G '(F; | )&.'&1'+ J/&*3'F7*'3n '& ! &' '& ! &' ,/ +&!1&!)& # &' '&!+&.'&/'!'',' -& ! %!/'' 7*' '&h ,)7A3-7''/77*7, $7' #/0'(3&!l&+ ?'0-'F''-&9'!l'!37./7!'7-3+7'3n z&'(+'0/'0'''('',7*/3/&'(''+&)',)('&1()&+'=&.'(''/( !'&07*)(.'7p!7 z& !3%) |'?&!+&' 1& ! &!+&' v&!+&' f&!+&' 1& ! &!+&' A&!| ;&!+&' | O&' )'N33K,) C&77/ | t&9 <|-j&'3E&PW& !/0) | `&)3)+A =&!+&)'9 G&)''35 G&''; =&!)&!''; | 1&'<01'3(.'(9')3*)3 !5&.' 7*/ 7,/ /3<+3)' !8 7*/ j&*| 1&3 v& !'&- | U&7 ^&) )'+('')(+ '(./()'+ N) '37*`&' -&9 |  &+ E(1&'(/ 7*8) h7Q&'')(' '3| 3& !('01' ! ' !(''(3'/(7'' .7*/ 7*/ 13*/3| n +'0| '& !'(-' !('-(.'(1&+ 7*13775'57) ''0`&0+''(''0) '&7*/ p& !'('')( !'()''(3 +3l&3(3''('') -37*) )&7*`&/%'3| j )'F='01'+&.+&0= |  #| 5%O#*h#n%r'M +' l!#$5# Q!#$5#3!/#' /!' 3#3!3#3!/#' /!' 3# % !3#3!?#' 3#3$3#3$3#3$-#!'#+! !$6&)6)#!'#+!()6+#' '#+!!)63#-!)6' )#!'#+!('6!98-</.'3 !12>'1 !2/B33 !9:-<P53 !12+3'-)3 !4/@93 !43:73P-<- /< !,%' /,)4 !/0*7,)4 !/0!=%) W5O ='+).));'A '7$+7$'7&)!'#)! !#7$'7H-!/7 $!7+! !7#+!&+&&'7'#'!-4$+# !74'7 !#7C,j+ !!#++8/ -4-7'4+7H'7H'7H17Hb7'4'7 !47Hb7|%z437+4K7'417 !/0| l7H`7U4t7/4G7; r7U 97M | A,| f7O,|$)7H57H| 5734|!M7H|#57!|!=7 (/0`,|  7-4 !/0+4 ! 4!S4 &/0C4|%b7|!v4 ,/0| G4 #/0d4 !/0|%f4| )7M4'7/4) 77|#b | '!!| '# ! !&)!'# $!#+! !#!'#$1#*)! R#!'#/7 #!#)'1 +38'3p#7 | 5&5  !%3? .Q&5 1&!1&!1&!1&!1&!1&!1&!1&!d''3 #12)3 !12 !31D53<'3 !.3 !12'3 !12 %/0-3*'3| f W7!|! 7; |$h7W ;7+ P)3 !7% !&+ &/0'7 %/0 !./'0N5+/'<-%'7)+ !%&F'7!| v&' '''6'% !&.|!#&F)%,- v&) |!+&!'7+,77Y&- l7; C&b7!7,r7A,d77,r7A,| G7!|%b7} X;&7 | I7}%/A&| 1 M&*|9G&) | 775 t&/%'3|%z&*)3C&7*'&K  8!# !&'))F3 '' !3% -!#3 | U&7+''/33 Q65%'6 '!#$)# @!#*3# #!#'! %#! !#%'6 #!# ! !&?  &!#| j &1&.)&.+&.Q&'(''0+7+ /,'7 !57/ | 1&+33 '(| -&C(.5 '37*/ G'/&)3,+ 7*[&3''3Q&9''(9 F^&) )'0| '&.'(+''(.+(=3 ! %7*+ '3d v&/''('''(''5 )&.3& !'(' 7*' +3C&*/&)7 !&(+ | )& !'&)''&''-&'' !&',S '&*'3f /&' /&' /&5 1&!1&|#7 j&'(.'(.'( !3(.' 7*/ }!e;&; Q&+ | +&+ |MQ=} T7 |&d&' | E&' |!C&p 1#; -#-  !&'7&H=&!-& ! &!'&!'&!|!G&C6E |()& !/0C | I&' | 5&t ;& !57' C'13 !/0F/ 1'5 F'.'- )/0'3 !/0+3)-)3!+3 !./ #0/@)3 !4.)4 ! 3J'3+ -&!|##&'  !< )3J)3 !/0 !34 !3.'37*'3)4'3W! !/3 !06 !-6W# !/4 !04 !/0 !3/@'37&*| #&'%b&) /&' /&' /&' )&) '5 !46N'5 ! 7+4'77 )<'7' ;&!W&!I&!'&!A&' ?&h |!f&- '3N+ | #,) 57| 3++,E78- ;7| 1 | #7.|!t ^&) | +&| ' b&!+,; E&63&6| 3 `& ! 3l&+ 3&F-+x t!t#| f&' 7*|3  /&'  !& |  &!'&) ,' Q& ! 33,|#U O&/,) FW&- F|$; ,)'!''- +'+&!)&!Y&+ )'+ .3,3 531 ^&',F|!p | 5&) 13O&' 3,I&- 3,|!p | [&|+t b,|(U  !('0| 3&A'13+ K,7*C ''0| #&)(+''('''3X+3|wd |3S&|#7 |!5+= +3|bb |7l&}#8j |,^&}$Dz '&}!!# |%M77 r7' | A7'()')7/(3<3''71'`7+'| )7h | M7)'N|$/ | x75 G,|#1 W!W#W!1#!G#W!W# !! '!' $' '!' +!!3!+# ! #!1#!9#W!W#'!!+!' 3!!1!!W#'!!+!!-! ! !) 1!!W#W!W#W!W#W!W#W!W#W!W#W![#' U!HU#H/#U!HU#H/#U!HU#H/#U!HU#H/#U!HU#H/# !!#' | -*} NS |  7+ |!77; A7' ?7' A7!A7d 9,- b7!| =7/ z7| ` ^7= z7- 571 '7|#r f7A /7!| U7) K7; n7!-7M E7A | G7 ! 7!|$'7!+7) | E7G S7|#; -7!C7!)7 $ 7!)7!/7' +7 ! 7' +7!;7+ 97| ) | U7| = |!W7|P[ }*Q/&v } !5&9 |$x&}$#I |,'&|AO X` |!/<|!p |%A'}PF' ";
+// encode a string constant
 function h$str(s) {
   var enc = null;
   return function() {
@@ -4800,6 +5556,7 @@ function h$str(s) {
     return enc;
   }
 }
+// encode a raw string from bytes
 function h$rstr(d) {
   var enc = null;
   return function() {
@@ -4809,13 +5566,15 @@ function h$rstr(d) {
     return enc;
   }
 }
+// these aren't added to the CAFs, so the list stays in mem indefinitely, is that a problem?
 function h$strt(str, cc) { return h$c1(h$lazy_e, function() { return h$toHsString(str, cc); }, cc); }
 function h$strta(str, cc) { return h$c1(h$lazy_e, function() { return h$toHsStringA(str, cc); }, cc); }
 function h$strtb(arr, cc) { return h$c1(h$lazy_e, function() { return h$toHsStringMU8(arr, cc); }, cc); }
+// unpack strings without thunks
 function h$ustra(str, cc) { return h$toHsStringA(str, cc); }
-function h$ustr(str, cc) { return h$toHsString(str, cc); }
-function h$urstra(arr, cc) { return h$toHsList(arr, cc); }
-function h$urstr(arr, cc) { return h$toHsStringMU8(arr, cc); }
+function h$ustr(str, cc) { return h$toHsString(str, cc); } // utf8 string, string argument
+function h$urstra(arr, cc) { return h$toHsList(arr, cc); } // ascii string, array of codepoints argument
+function h$urstr(arr, cc) { return h$toHsStringMU8(arr, cc); } // utf8 string, array of bytes argumnt
 function h$caseMapping(x) {
     return (x%2)?-((x+1)>>1):(x>>1);
 }
@@ -4846,22 +5605,34 @@ function h$u_iswspace(a) {
 var h$lower = null;
 function h$u_iswlower(a) {
     if(h$lower == null) { h$lower = h$decodeRLE(h$lowerRanges); }
-    return h$lower[a]|0;
+    if(a < 0x30000) return h$lower[a]|0;
+    if(a < 0xE0000) return 0;
+    return h$lower[a-0xB0000]|0;
 }
 var h$upper = null;
 function h$u_iswupper(a) {
     if(h$upper == null) { h$upper = h$decodeRLE(h$upperRanges); }
-    return h$upper[a]|0;
+    if(a < 0x30000) return h$upper[a]|0;
+    if(a < 0xE0000) return 0;
+    return h$upper[a-0xB0000]|0;
 }
-var h$cntrl = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,127,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,157,158,159];
+var h$cntrlChars = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,127,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,157,158,159];
+var h$cntrl = null;
 function h$u_iswcntrl(a) {
-  return (h$cntrl.indexOf(a) !== -1) ? 1 : 0;
+    if(h$cntrl === null) {
+        h$cntrl = [];
+        for(var i=0;i<=159;i++) h$cntrl[i] = (h$cntrlChars.indexOf(i) !== -1) ? 1 : 0;
+    }
+    return a <= 159 ? h$cntrl[a] : 0;
 }
 var h$print = null;
 function h$u_iswprint(a) {
     if(h$print == null) { h$print = h$decodeRLE(h$printRanges); }
-    return h$print[a]|0;
+    if(a < 0x30000) return h$print[a]|0;
+    if(a < 0xE0000) return 0;
+    return h$print[a-0xB0000]|0;
 }
+// decode a packed string (Compactor encoding method) to an array of numbers
 function h$decodePacked(s) {
     function f(o) {
         var c = s.charCodeAt(o);
@@ -4880,11 +5651,12 @@ function h$decodePacked(s) {
     }
     return r;
 }
+// decode string with encoded character ranges
 function h$decodeRLE(str) {
     var r = [], x = 0, i = 0, j = 0, v, k, a = h$decodePacked(str);
     while(i < a.length) {
         v = a[i++];
-        if(v === 0) {
+        if(v === 0) { // alternating
             k = a[i++];
             while(k--) {
                 r[j++] = x;
@@ -4899,7 +5671,7 @@ function h$decodeRLE(str) {
                 r[j++] = x;
                 x = 1-x;
             }
-            if(x) while(k--) r[j++] = x; else j+=k;
+            while(k--) r[j++] = x;
             x = 1-x;
         }
     }
@@ -4910,7 +5682,7 @@ function h$decodeMapping(str, f) {
     var r = [], i = 0, j = 0, k, v, v2, a = h$decodePacked(str);
     while(i < a.length) {
         v = a[i++];
-        if(v === 0) {
+        if(v === 0) { // alternating
             k = a[i];
             v = f(a[i+1]);
             v2 = f(a[i+2]);
@@ -4932,7 +5704,7 @@ function h$decodeMapping(str, f) {
                 v = a[i++];
             }
             v = f(v);
-            if(v) while(k--) r[j++] = v; else j+=k;
+            while(k--) r[j++] = v;
         }
     }
     return r;
@@ -4940,12 +5712,15 @@ function h$decodeMapping(str, f) {
 var h$unicodeCat = null;
 function h$u_gencat(a) {
     if(h$unicodeCat == null) h$unicodeCat = h$decodeMapping(h$catMapping, function(x) { return x; });
+    // private use
     if(a >= 0xE000 && a <= 0xF8FF || a >= 0xF0000 & a <= 0xFFFFD || a >= 0x100000 && a <= 0x10FFFD) return 28;
-    var c = h$unicodeCat[a]|0;
+    var c = a < 0x30000 ? (h$unicodeCat[a]|0) :
+        (a < 0xE0000 ? 0 : (h$unicodeCat[a-0xB0000]|0));
     return c?c-1:29;
 }
 function h$localeEncoding() {
-   h$ret1 = 0;
+    //   h$log("### localeEncoding");
+   h$ret1 = 0; // offset 0
    return h$encodeUtf8("UTF-8");
 }
 function h$rawStringData(str) {
@@ -4957,10 +5732,12 @@ function h$rawStringData(str) {
     u8[str.length] = 0;
     return v;
 }
+// encode a javascript string to a zero terminated utf8 byte array
 function h$encodeUtf8(str) {
   var i, low;
   var n = 0;
   for(i=0;i<str.length;i++) {
+    // non-BMP encoded as surrogate pair in JavaScript string, get actual codepoint
     var c = str.charCodeAt(i);
     if (0xD800 <= c && c <= 0xDBFF) {
       low = str.charCodeAt(i+1);
@@ -4986,11 +5763,13 @@ function h$encodeUtf8(str) {
   n = 0;
   for(i=0;i<str.length;i++) {
     var c = str.charCodeAt(i);
+    // non-BMP encoded as surrogate pair in JavaScript string, get actual codepoint
     if (0xD800 <= c && c <= 0xDBFF) {
       low = str.charCodeAt(i+1);
       c = ((c - 0xD800) * 0x400) + (low - 0xDC00) + 0x10000;
       i++;
     }
+//    h$log("### encoding char " + c + " to UTF-8: " + String.fromCodePoint(c));
     if(c <= 0x7F) {
       u8[n] = c;
       n++;
@@ -5026,9 +5805,12 @@ function h$encodeUtf8(str) {
       n+=6;
     }
   }
-  u8[v.len-1] = 0;
+  u8[v.len-1] = 0; // terminator
+//  h$log("### encodeUtf8: " + str);
+//  h$log(v);
   return v;
 }
+// encode a javascript string to a zero terminated utf16 byte array
 function h$encodeUtf16(str) {
   var n = 0;
   var i;
@@ -5055,9 +5837,11 @@ function h$encodeUtf16(str) {
       n+=4;
     }
   }
-  dv.setUint8(v.len-1,0);
+  dv.setUint8(v.len-1,0); // terminator
   return v;
 }
+// convert a string to a buffer, set second field in
+// Addr# to length
 function h$fromStr(s) {
   var l = s.length;
   var b = h$newByteArray(l * 2);
@@ -5068,6 +5852,8 @@ function h$fromStr(s) {
   h$ret1 = l;
   return b;
 }
+// convert a Data.Text buffer with offset/length to a
+// JS string
 function h$toStr(b,o,l) {
   var a = [];
   var end = 2*(o+l);
@@ -5079,7 +5865,34 @@ function h$toStr(b,o,l) {
   }
   return String.fromCharCode.apply(this, a);
 }
+/*
+function h$encodeUtf16(str) {
+  var b = new DataView(new ArrayBuffer(str.length * 2));
+  for(var i=str.length-1;i>=0;i--) {
+    b.setUint16(i<<1, str.charCodeAt(i));
+  }
+  h$ret1 = 0;
+  return b;
+}
+var h$eU16 = h$encodeUtf16;
+
+function h$decodeUtf16(v,start) {
+  return h$decodeUtf16(v, v.byteLength - start, start);
+}
+
+function h$decodeUtf16z(v,start) {
+  var len = v.byteLength - start;
+  for(var i=start;i<l;i+=2) {
+    if(v.getUint16(i) === 0) {
+      len = i;
+      break;
+    }
+  }
+  return h$decodeUtf16l(v,l,start)
+}
+*/
 function h$decodeUtf16l(v, byteLen, start) {
+  // perhaps we can apply it with an Uint16Array view, but that might give us endianness problems
   var a = [];
   for(var i=0;i<byteLen;i+=2) {
     a[i>>1] = v.dv.getUint16(i+start,true);
@@ -5087,26 +5900,36 @@ function h$decodeUtf16l(v, byteLen, start) {
   return String.fromCharCode.apply(this, a);
 }
 var h$dU16 = h$decodeUtf16;
+// decode a buffer with UTF-8 chars to a JS string
+// stop at the first zero
 function h$decodeUtf8z(v,start) {
+//  h$log("h$decodeUtf8z");
   var n = start;
   var max = v.len;
   while(n < max) {
+//    h$log("### " + n + " got char: " + v.u8[n]);
     if(v.u8[n] === 0) { break; }
     n++;
   }
   return h$decodeUtf8(v,n,start);
 }
+// decode a buffer with Utf8 chars to a JS string
+// invalid characters are ignored
 function h$decodeUtf8(v,n0,start) {
+//  h$log("### decodeUtf8");
+//  h$log(v);
   var n = n0 || v.len;
   var arr = [];
   var i = start || 0;
   var code;
   var u8 = v.u8;
+//  h$log("### decoding, starting at:  " + i);
   while(i < n) {
     var c = u8[i];
     while((c & 0xC0) === 0x80) {
       c = u8[++i];
     }
+//    h$log("### lead char: " + c);
     if((c & 0x80) === 0) {
       code = (c & 0x7F);
       i++;
@@ -5146,6 +5969,8 @@ function h$decodeUtf8(v,n0,start) {
              );
       i+=6;
     }
+    // h$log("### decoded codePoint: " + code + " - " + String.fromCharCode(code)); // String.fromCodePoint(code));
+    // need to deal with surrogate pairs
     if(code > 0xFFFF) {
       var offset = code - 0x10000;
       arr.push(0xD800 + (offset >> 10), 0xDC00 + (offset & 0x3FF));
@@ -5155,6 +5980,7 @@ function h$decodeUtf8(v,n0,start) {
   }
   return String.fromCharCode.apply(this, arr);
 }
+// fixme what if terminator, then we read past end
 function h$decodeUtf16(v) {
   var n = v.len;
   var arr = [];
@@ -5165,42 +5991,53 @@ function h$decodeUtf16(v) {
   return String.fromCharCode.apply(this, arr);
 }
 function h$hs_iconv_open(to,to_off,from,from_off) {
-  h$errno = h$EINVAL;
+  h$errno = h$EINVAL; // no encodings supported
   return -1;
+//  var fromStr = decodeUtf8(from, from_off);
+//  var toStr = decodeUtf8(to, to_off);
+//  h$log("#### hs_iconv_open: " + fromStr + " -> " + toStr);
+//  return 1; // fixme?
 }
 function h$hs_iconv_close(iconv) {
   return 0;
 }
+// ptr* -> ptr (array)
 function h$derefPtrA(ptr, ptr_off) {
   return ptr.arr[ptr_off][0];
 }
+// ptr* -> ptr (offset)
 function h$derefPtrO(ptr, ptr_off) {
   return ptr.arr[ptr_off][1];
 }
+// word** -> word    ptr[x][y]
 function h$readPtrPtrU32(ptr, ptr_off, x, y) {
   x = x || 0;
   y = y || 0;
   var arr = ptr.arr[ptr_off + 4 * x];
   return arr[0].dv.getInt32(arr[1] + 4 * y, true);
 }
+// char** -> char   ptr[x][y]
 function h$readPtrPtrU8(ptr, ptr_off, x, y) {
   x = x || 0;
   y = y || 0;
   var arr = ptr.arr[ptr_off + 4 * x];
   return arr[0].dv.getUint8(arr[1] + y);
 }
+// word**   ptr[x][y] = v
 function h$writePtrPtrU32(ptr, ptr_off, v, x, y) {
   x = x || 0;
   y = y || 0;
   var arr = ptr.arr[ptr_off + 4 * x];
   arr[0].dv.putInt32(arr[1] + y, v);
 }
+// unsigned char** ptr[x][y] = v
 function h$writePtrPtrU8(ptr, ptr_off, v, x, y) {
   x = x || 0;
   y = y || 0;
   var arr = ptr.arr[ptr_off+ 4 * x];
   arr[0].dv.putUint8(arr[1] + y, v);
 }
+// convert JavaScript String to a Haskell String
 function h$toHsString(str, cc) {
   if(typeof str !== 'string') return h$ghczmprimZCGHCziTypesziZMZN;
   var i = str.length - 1;
@@ -5216,18 +6053,20 @@ function h$toHsString(str, cc) {
   }
   return r;
 }
+// string must have been completely forced first
 function h$fromHsString(str) {
     var xs = '';
     while(str.f.a === 2) {
         if(typeof str.d1 === 'number') {
             xs += String.fromCharCode(str.d1);
         } else {
-            xs += String.fromCharCode(str.d1.d1);
+            xs += String.fromCharCode(str.d1.d1); // unbox_e
         }
         str = str.d2;
     }
     return xs;
 }
+// list of JSRef to array, list must have been completely forced first
 function h$fromHsListJSRef(xs) {
     var arr = [];
     while(xs.f.a === 2) {
@@ -5236,6 +6075,7 @@ function h$fromHsListJSRef(xs) {
     }
     return arr;
 }
+// ascii only version of the above
 function h$toHsStringA(str, cc) {
   if(typeof str !== 'string') return h$ghczmprimZCGHCziTypesziZMZN;
   var i = str.length - 1;
@@ -5246,6 +6086,7 @@ function h$toHsStringA(str, cc) {
   }
   return r;
 }
+// convert array with modified UTF-8 encoded text
 function h$toHsStringMU8(arr, cc) {
     var accept = false, b, n = 0, cp = 0, r = h$ghczmprimZCGHCziTypesziZMZN, i = arr.length - 1;
     while(i >= 0) {
@@ -5278,6 +6119,7 @@ function h$toHsList(arr, cc) {
   }
   return r;
 }
+// array of JS values to Haskell list of JSRef
 function h$toHsListJSRef(arr, cc) {
     var r = h$ghczmprimZCGHCziTypesziZMZN;
     for(var i=arr.length-1;i>=0;i--) {
@@ -5285,6 +6127,7 @@ function h$toHsListJSRef(arr, cc) {
     }
     return r;
 }
+// unpack ascii string, append to existing Haskell string
 function h$appendToHsStringA(str, appendTo, cc) {
   var i = str.length - 1;
   var r = appendTo;
@@ -5294,12 +6137,22 @@ function h$appendToHsStringA(str, appendTo, cc) {
   }
   return r;
 }
+// throw e wrapped in a GHCJS.Prim.JSException  in the current thread
 function h$throwJSException(e) {
+  // a GHCJS.Prim.JSException
   var jsE = h$c2(h$ghcjszmprimZCGHCJSziPrimziJSException_con_e,e,h$toHsString(e.toString()));
+  // wrap it in a SomeException, adding the Exception dictionary
   var someE = h$c2(h$baseZCGHCziExceptionziSomeException_con_e,
      h$ghcjszmprimZCGHCJSziPrimzizdfExceptionJSException, jsE);
   return h$throw(someE, true);
 }
+/* 
+   Integer and integer-gmp support
+   partial GMP emulation
+
+   note: sign behaves different from real gmp sign,
+         value is always zero, don't use it for comparisons
+*/
 var h$bigZero = h$nbv(0);
 var h$bigOne = h$nbv(1);
 var h$bigCache = [];
@@ -5308,13 +6161,14 @@ var h$bigCache = [];
     h$bigCache.push(h$nbv(i));
   }
 })();
+// convert a value to a BigInt
 function h$bigFromInt(v) {
   ;
   var v0 = v|0;
   if(v0 >= 0) {
     if(v0 <= 100) {
       return h$bigCache[v0];
-    } else if(v0 < 268435456) {
+    } else if(v0 < 268435456) { // 67108864) { // guaranteed to fit in one digit
       return h$nbv(v0);
     }
     var r1 = h$nbv(v0 >>> 16);
@@ -5326,7 +6180,7 @@ function h$bigFromInt(v) {
     return r3;
   } else {
     v0 = -v0;
-    if(v0 < 268435456) {
+    if(v0 < 268435456) { // 67108864) {
       return h$nbv(v0).negate();
     }
     var r1 = h$nbv(v0 >>> 16);
@@ -5344,7 +6198,7 @@ function h$bigFromWord(v) {
   if(v0 >= 0) {
     if(v0 <= 100) {
       return h$bigCache[v0];
-    } else if(v0 < 268435456) {
+    } else if(v0 < 268435456) { // 67108864) { // guaranteed to fit in one digit
       return h$nbv(v0);
     }
   }
@@ -5411,6 +6265,7 @@ function h$encodeNumber(big,e) {
     r += m * Math.pow(2,(l-i-1)*8) * (b[i] & 0xff);
     ;
   }
+  // last one signed
   if(b[0] != 0) {
     r += m * Math.pow(2,(l-1)*8) * b[0];
   }
@@ -5451,6 +6306,7 @@ function h$integer_cmm_timesIntegerIntzh(sa, abits, b) {
   ;
   return abits.multiply(h$bigFromInt(b));
 }
+// fixme make more efficient, divideRemainder
 function h$integer_cmm_quotRemIntegerzh(sa, abits, sb, bbits) {
     ;
     var q = abits.divide(bbits);
@@ -5587,10 +6443,12 @@ function h$integer_cmm_powIntegerzh(sa, abits, b) {
       return abits.pow(b + 2147483648);
     }
 }
+// (a ^ b) % c
 function h$integer_cmm_powModIntegerzh(sa, abits, sb, bbits, sc, cbits) {
     ;
     return abits.modPow(bbits, cbits);
 }
+// warning, there is no protection against side-channel attacks here
 function h$integer_cmm_powModSecIntegerzh(sa, abits, sb, bbits, sc, cbits) {
     ;
     return h$integer_cmm_powModIntegerzh(sa, abits, sb, bbits, sc, cbits);
@@ -5633,6 +6491,7 @@ function h$integer_cmm_decodeDoublezh(x) {
     }
     var exponent = (Math.floor(Math.log(x) * h$oneOverLog2)-52)|0;
     var n;
+    // prevent overflow
     if(exponent < -1000) {
       n = x * Math.pow(2,-exponent-128) * Math.pow(2,128);
     } else if(exponent > 900) {
@@ -5640,6 +6499,7 @@ function h$integer_cmm_decodeDoublezh(x) {
     } else {
       n = x * Math.pow(2,-exponent);
     }
+    // fixup precision, do we also need the other way (exponent++) ?
     if(Math.abs(n - Math.floor(n) - 0.5) < 0.0001) {
       exponent--;
       n *= 2;
@@ -5722,6 +6582,9 @@ function h$__int_encodeDouble(i,e) {
 function h$__int_encodeFloat(i,e) {
    return i * Math.pow(2,e);
 }
+// set up debug logging for the current JS environment/engine
+// browser also logs to <div id="output"> if jquery is detected
+// the various debug tracing options use h$log
 var h$glbl;
 function h$getGlbl() { h$glbl = this; }
 h$getGlbl();
@@ -5735,30 +6598,25 @@ function h$log() {
   } else {
     console.log.apply(console, arguments);
   }
-  if(typeof(jQuery) !== 'undefined') {
-    var x = '';
-    for(var i=0;i<arguments.length;i++) { x = x + arguments[i]; }
-    var xd = jQuery("<div></div>");
-    xd.text(x);
-    jQuery('#output').append(xd);
-  }
 }
 function h$collectProps(o) {
   var props = [];
   for(var p in o) { props.push(p); }
   return("{"+props.join(",")+"}");
 }
+// load the command line arguments in h$programArgs
+// the first element is the program name
 var h$programArgs;
-if(typeof scriptArgs !== 'undefined') {
-  h$programArgs = scriptArgs.slice(0);
-  h$programArgs.unshift("a.js");
-} else if(typeof process !== 'undefined' && process.argv) {
-  h$programArgs = process.argv.slice(1);
-} else if(typeof snarf !== 'undefined' && typeof arguments !== 'undefined') {
-  h$programArgs = arguments.slice(0);
-  h$programArgs.unshift("a.js");
+if(h$isNode) {
+    h$programArgs = process.argv.slice(1);
+} else if(h$isJsShell && typeof h$getGlobal(this).scriptArgs !== 'undefined') {
+    h$programArgs = h$getGlobal(this).scriptArgs.slice(0);
+    h$programArgs.unshift("a.js");
+} else if(h$isJsShell && typeof h$getGlobal(this).arguments !== 'undefined') {
+    h$programArgs = h$getGlobal(this).arguments.slice(0);
+    h$programArgs.unshift("a.js");
 } else {
-  h$programArgs = [ "a.js" ];
+    h$programArgs = [ "a.js" ];
 }
 function h$getProgArgv(argc_v,argc_off,argv_v,argv_off) {
   ;
@@ -5786,43 +6644,65 @@ function h$setProgArgv(n, ptr_d, ptr_o) {
   h$programArgs = args;
 }
 function h$getpid() {
-  if(this['process']) return process.id;
+  if(h$isNode) return process.id;
   return 0;
 }
 function h$__hscore_environ() {
-  h$ret1 = 0;
-  return null;
-}
-function h$getenv() {
     ;
     h$ret1 = 0;
+    if(h$isNode) {
+        var env = [], i;
+        for(i in process.env) env.push(i + '=' + process.env[i]);
+        if(env.length === 0) return null;
+        var p = h$newByteArray(4*env.length+1);
+        p.arr = [];
+        for(i=0;i<env.length;i++) p.arr[4*i] = [h$encodeUtf8(env[i]), 0];
+        p.arr[4*env.length] = [null, 0];
+        return p;
+    }
+    return null;
+}
+function h$getenv(name, name_off) {
+    ;
+    h$ret1 = 0;
+    if(h$isNode) {
+        var n = h$decodeUtf8z(name, name_off);
+        if(typeof process.env[n] !== 'undefined')
+            return h$encodeUtf8(process.env[n]);
+    }
     return null;
 }
 function h$errorBelch() {
   h$log("### errorBelch: do we need to handle a vararg function here?");
 }
 function h$errorBelch2(buf1, buf_offset1, buf2, buf_offset2) {
+//  log("### errorBelch2");
   h$errorMsg(h$decodeUtf8z(buf1, buf_offset1), h$decodeUtf8z(buf2, buf_offset2));
 }
 function h$debugBelch2(buf1, buf_offset1, buf2, buf_offset2) {
   h$errorMsg(h$decodeUtf8z(buf1, buf_offset1), h$decodeUtf8z(buf2, buf_offset2));
 }
 function h$errorMsg(pat) {
+  // poor man's vprintf
   var str = pat;
   for(var i=1;i<arguments.length;i++) {
     str = str.replace(/%s/, arguments[i]);
   }
-  if(typeof process !== 'undefined' && process && process.stderr) {
+  if(h$isNode) {
     process.stderr.write(str);
-  } else if (typeof printErr !== 'undefined') {
+  } else if (h$isJsShell && typeof printErr !== 'undefined') {
     printErr(str);
-  } else if (typeof putstr !== 'undefined') {
+  } else if (h$isJsShell && typeof putstr !== 'undefined') {
     putstr(str);
-  } else if(typeof(console) !== 'undefined') {
-    console.log(str);
+  } else {
+    if(typeof console !== 'undefined') {
+      console.log(str);
+    }
   }
 }
+// this needs to be imported with foreign import ccall safe/interruptible
 function h$performMajorGC() {
+    // save current thread state so we can enter the GC
     var t = h$currentThread, err = null;
     t.sp = h$sp;
     h$currentThread = null;
@@ -5831,6 +6711,7 @@ function h$performMajorGC() {
     } catch(e) {
         err = e;
     }
+    // restore thread state
     h$currentThread = t;
     h$sp = t.sp;
     h$stack = t.stack;
@@ -5842,6 +6723,7 @@ function h$baseZCSystemziCPUTimeZCgetrusage() {
 function h$getrusage() {
   return 0;
 }
+// fixme need to fix these struct locations
 function h$gettimeofday(tv_v,tv_o,tz_v,tz_o) {
   var now = Date.now();
   tv_v.dv.setInt32(tv_o, (now / 1000)|0, true);
@@ -5869,9 +6751,9 @@ function h$localtime_r(timep_v, timep_o, result_v, result_o) {
   result_v.dv.setInt32(result_o + 16, d.getMonth(), true);
   result_v.dv.setInt32(result_o + 20, d.getFullYear()-1900, true);
   result_v.dv.setInt32(result_o + 24, d.getDay(), true);
-  result_v.dv.setInt32(result_o + 28, 0, true);
-  result_v.dv.setInt32(result_o + 32, -1, true);
-  result_v.dv.setInt32(result_o + 40, 0, true);
+  result_v.dv.setInt32(result_o + 28, 0, true); // fixme yday 1-365 (366?)
+  result_v.dv.setInt32(result_o + 32, -1, true); // dst information unknown
+  result_v.dv.setInt32(result_o + 40, 0, true); // gmtoff?
   if(!result_v.arr) result_v.arr = [];
   result_v.arr[result_o + 40] = [h$myTimeZone, 0];
   result_v.arr[result_o + 48] = [h$myTimeZone, 0];
@@ -5879,8 +6761,12 @@ function h$localtime_r(timep_v, timep_o, result_v, result_o) {
   return result_v;
 }
 var h$__hscore_localtime_r = h$localtime_r;
+// weak reference support
+// contains all pending finalizers
 var h$finalizers = new h$Set();
+// filled at scan time, weak refs with possible work to do
 var h$scannedWeaks = [];
+// called by the GC after marking the heap
 function h$finalizeWeaks() {
     var mark = h$gcMark;
     ;
@@ -5896,13 +6782,14 @@ function h$finalizeWeaks() {
         }
     }
     ;
+    // start a finalizer thread if any finalizers need to be run
     if(toFinalize.length > 0) {
         var t = new h$Thread();
         for(i=0;i<toFinalize.length;i++) {
             w = toFinalize[i];
             t.sp += 6;
-            t.stack[t.sp-5] = 0;
-            t.stack[t.sp-4] = h$noop;
+            t.stack[t.sp-5] = 0; // mask
+            t.stack[t.sp-4] = h$noop; // handler, dummy
             t.stack[t.sp-3] = h$catch_e;
             t.stack[t.sp-2] = h$ap_1_0;
             t.stack[t.sp-1] = w.finalizer;
@@ -5913,6 +6800,7 @@ function h$finalizeWeaks() {
     }
     return toFinalize;
 }
+// clear references for reachable weak refs with unreachable keys
 function h$clearWeaks() {
     var mark = h$gcMark;
     ;
@@ -5925,8 +6813,11 @@ function h$clearWeaks() {
     }
 }
 var h$weakFinalizerN = 0;
+/** @constructor */
 function h$Weak(key, val, finalizer) {
     if(typeof key !== 'object') {
+        // can't attach a StableName to objects with unboxed storage
+        // our weak ref will be finalized soon.
         ;
         this.keym = new h$StableName(0);
     } else {
@@ -5943,6 +6834,7 @@ function h$Weak(key, val, finalizer) {
         this.finalizer = fin;
     }
     this.m = 0;
+//    h$scannedWeaks.push(this); // fixme debug
 }
 function h$makeWeak(key, val, fin) {
     ;
@@ -5966,30 +6858,39 @@ function h$finalizeWeak(w) {
         return r;
     }
 }
+// preemptive threading support
+// run gc when this much time has passed (ms)
+// preempt threads after the scheduling quantum (ms)
+// check sched quantum after 10*GHCJS_SCHED_CHECK calls
+// yield to js after running haskell for GHCJS_BUSY_YIELD ms
+// thread status
 var h$threadRunning = 0;
 var h$threadBlocked = 1;
 var h$threadFinished = 16;
 var h$threadDied = 17;
 var h$threadIdN = 0;
+// all threads except h$currentThread
+// that are not finished/died can be found here
 var h$threads = new h$Queue();
 var h$blocked = new h$Set();
+/** @constructor */
 function h$Thread() {
     this.tid = ++h$threadIdN;
     this.status = h$threadRunning;
     this.stack = [h$done, 0, h$baseZCGHCziConcziSynczireportError, h$catch_e];
     this.sp = 3;
-    this.mask = 0;
-    this.interruptible = false;
-    this.excep = [];
-    this.delayed = false;
-    this.blockedOn = null;
-    this.retryInterrupted = null;
-    this.transaction = null;
+    this.mask = 0; // async exceptions masked (0 unmasked, 1: uninterruptible, 2: interruptible)
+    this.interruptible = false; // currently in an interruptible operation
+    this.excep = []; // async exceptions waiting for unmask of this thread
+    this.delayed = false; // waiting for threadDelay
+    this.blockedOn = null; // object on which thread is blocked
+    this.retryInterrupted = null; // how to retry blocking operation when interrupted
+    this.transaction = null; // for STM
     this.isSynchronous = false;
     this.continueAsync = false;
-    this.m = 0;
-    this.ccs = h$CCS_SYSTEM;
-    this._key = this.tid;
+    this.m = 0; // gc mark
+    this.ccs = h$CCS_SYSTEM; // cost-centre stack
+    this._key = this.tid; // for storing in h$Set / h$Map
 }
 function h$rts_getThreadId(t) {
   return t.tid;
@@ -5999,6 +6900,7 @@ function h$cmp_thread(t1,t2) {
   if(t1.tid > t2.tid) return 1;
   return 0;
 }
+// description of the thread, if unlabeled then just the thread id
 function h$threadString(t) {
   if(t === null) {
     return "<no thread>";
@@ -6016,6 +6918,7 @@ function h$fork(a, inherit) {
     t.mask = h$currentThread.mask;
   }
   t.ccs = h$CCS_MAIN;
+  // TRACE_SCHEDULER("sched: action forked: " + a.f.n);
   t.stack[4] = h$ap_1_0;
   t.stack[5] = a;
   t.stack[6] = h$return;
@@ -6024,8 +6927,8 @@ function h$fork(a, inherit) {
   return t;
 }
 function h$threadStatus(t) {
-  h$ret1 = 1;
-  h$ret2 = 0;
+  h$ret1 = 1; // capability
+  h$ret2 = 0; // locked
   return t.status;
 }
 function h$waitRead(fd) {
@@ -6040,11 +6943,13 @@ function h$waitWrite(fd) {
   h$blockThread(h$currentThread,fd,[h$waitWrite,fd]);
   return h$reschedule;
 }
+// threadDelay support:
 var h$delayed = new h$HeapSet();
 function h$wakeupDelayed(now) {
     while(h$delayed.size() > 0 && h$delayed.peekPrio() < now) {
         var t = h$delayed.pop();
         ;
+        // might have been woken up early, don't wake up again in that case
         if(t.delayed) {
             t.delayed = false;
             h$wakeupThread(t);
@@ -6053,7 +6958,7 @@ function h$wakeupDelayed(now) {
 }
 function h$delayThread(time) {
   var now = Date.now();
-  var ms = time/1000;
+  var ms = time/1000; // we have no microseconds in JS
   ;
   h$delayed.add(now+ms, h$currentThread);
   h$currentThread.delayed = true;
@@ -6071,9 +6976,11 @@ function h$yield() {
   h$currentThread.sp = h$sp;
   return h$reschedule;
 }
+// raise the async exception in the thread if not masked
 function h$killThread(t, ex) {
   ;
   if(t === h$currentThread) {
+    // if target is self, then throw even if masked
     h$sp += 2;
     h$stack[h$sp-1] = h$r1;
     h$stack[h$sp] = h$return;
@@ -6081,7 +6988,7 @@ function h$killThread(t, ex) {
   } else {
     ;
     if(t.mask === 0 || (t.mask === 2 && t.interruptible)) {
-      if(t.stack) {
+      if(t.stack) { // finished threads don't have a stack anymore
         h$forceWakeupThread(t);
         t.sp += 2;
         t.stack[t.sp-1] = ex;
@@ -6157,28 +7064,27 @@ function h$pendingAsync() {
   var t = h$currentThread;
   return (t.excep.length > 0 && (t.mask === 0 || (t.mask === 2 && t.interruptible)));
 }
+// post the first of the queued async exceptions to
+// this thread, restore frame is in thread if alreadySuspended
 function h$postAsync(alreadySuspended,next) {
-  var t = h$currentThread;
-  if(h$pendingAsync()) {
-    ;
+    var t = h$currentThread;
     var v = t.excep.shift();
-    var tposter = v[0];
-    var ex = v[1];
+    ;
+    var tposter = v[0]; // posting thread, blocked
+    var ex = v[1]; // the exception
     if(v !== null && tposter !== null) {
-      h$wakeupThread(tposter);
+        h$wakeupThread(tposter);
     }
     if(!alreadySuspended) {
-      h$suspendCurrentThread(next);
+        h$suspendCurrentThread(next);
     }
     h$sp += 2;
     h$stack[h$sp-1] = ex;
     h$stack[h$sp] = h$raiseAsync_frame;
     t.sp = h$sp;
-    return true;
-  } else {
-    return false;
-  }
 }
+// wakeup thread, thread has already been removed
+// from any queues it was blocked on
 function h$wakeupThread(t) {
     ;
     if(t.status === h$threadBlocked) {
@@ -6189,7 +7095,10 @@ function h$wakeupThread(t) {
     t.interruptible = false;
     t.retryInterrupted = null;
     h$threads.enqueue(t);
+    h$startMainLoop();
 }
+// force wakeup, remove this thread from any
+// queue it's blocked on
 function h$forceWakeupThread(t) {
   ;
   if(t.status === h$threadBlocked) {
@@ -6203,11 +7112,13 @@ function h$removeThreadBlock(t) {
     if(o === null || o === undefined) {
       throw ("h$removeThreadBlock: blocked on null or undefined: " + h$threadString(t));
     } else if(o === h$delayed) {
+      // thread delayed
       h$delayed.remove(t);
       t.delayed = false;
     } else if(o instanceof h$MVar) {
       ;
       ;
+      // fixme this is rather inefficient
       var r, rq = new h$Queue();
       while((r = o.readers.dequeue()) !== null) {
           if(r !== t) rq.enqueue(r);
@@ -6219,8 +7130,15 @@ function h$removeThreadBlock(t) {
       o.readers = rq;
       o.writers = wq;
       ;
+/*    } else if(o instanceof h$Fd) {
+      TRACE_SCHEDULER("blocked on fd");
+      h$removeFromArray(o.waitRead,t);
+      h$removeFromArray(o.waitWrite,t); */
     } else if(o instanceof h$Thread) {
       ;
+      // set thread (first in pair) to null, exception will still be delivered
+      // but this thread not woken up again
+      // fixme: are these the correct semantics?
       for(var i=0;i<o.excep.length;i++) {
         if(o.excep[i][0] === t) {
           o.excep[i][0] = null;
@@ -6274,12 +7192,17 @@ function h$blockThread(t,o,resume) {
     t.sp = h$sp;
     h$blocked.add(t);
 }
+// the main scheduler, called from h$mainLoop
+// returns null if nothing to do, otherwise
+// the next function to run
 var h$lastGc = Date.now();
-var h$gcInterval = 1000;
+var h$gcInterval = 1000; // ms
 function h$scheduler(next) {
     ;
     var now = Date.now();
     h$wakeupDelayed(now);
+    // find the next runnable thread in the run queue
+    // remove non-runnable threads
     if(h$currentThread && h$pendingAsync()) {
         ;
         if(h$currentThread.status !== h$threadRunning) {
@@ -6293,10 +7216,13 @@ function h$scheduler(next) {
     while(t = h$threads.dequeue()) {
         if(t.status === h$threadRunning) { break; }
     }
+    // if no other runnable threads, just continue current (if runnable)
     if(t === null) {
         ;
         if(h$currentThread && h$currentThread.status === h$threadRunning) {
+            // do gc after a while
             if(now - h$lastGc > h$gcInterval) {
+                // save active data for the thread on its stack
                 if(next !== h$reschedule && next !== null) {
                     h$suspendCurrentThread(next);
                     next = h$stack[h$sp];
@@ -6305,86 +7231,99 @@ function h$scheduler(next) {
                 h$currentThread = null;
                 h$gc(ct);
                 h$currentThread = ct;
+                // gc might replace the stack of a thread, so reload it
                 h$stack = h$currentThread.stack;
                 h$sp = h$currentThread.sp
             }
             ;
-            return (next===h$reschedule || next === null)?h$stack[h$sp]:next;
+            return (next===h$reschedule || next === null)?h$stack[h$sp]:next; // just continue
         } else {
             ;
             h$currentThread = null;
+            // We could set a timer here so we do a gc even if Haskell pauses for a long time.
+            // However, currently this isn't necessary because h$mainLoop always sets a timer
+            // before it pauses.
             if(now - h$lastGc > h$gcInterval)
                 h$gc(null);
-            return null;
+            return null; // pause the haskell runner
         }
-    } else {
+    } else { // runnable thread in t, switch to it
         ;
         if(h$currentThread !== null) {
             if(h$currentThread.status === h$threadRunning) {
                 h$threads.enqueue(h$currentThread);
             }
+            // if h$reschedule called, thread takes care of suspend
             if(next !== h$reschedule && next !== null) {
                 ;
+                // suspend thread: push h$restoreThread stack frame
                 h$suspendCurrentThread(next);
             } else {
                 ;
                 h$currentThread.sp = h$sp;
             }
-            h$postAsync(true, next);
+            if(h$pendingAsync()) h$postAsync(true, next);
         } else {
             ;
         }
+        // gc if needed
         if(now - h$lastGc > h$gcInterval) {
             h$currentThread = null;
             h$gc(t);
         }
+        // schedule new one
         h$currentThread = t;
         h$stack = t.stack;
         h$sp = t.sp;
         ;
+        // TRACE_SCHEDULER("sp thing: " + h$stack[h$sp].n);
+        // h$dumpStackTop(h$stack,0,h$sp);
         return h$stack[h$sp];
     }
 }
-var h$yieldRun;
-if(false) {
-  (function() {
-    var handler = function(ev) {
-      if(ev.data === "h$mainLoop") { h$mainLoop(); }
-    };
-    if(window.addEventListener) {
-      window.addEventListener("message", handler);
-    } else {
-      window.attachEvent("message", handler);
+function h$scheduleMainLoop() {
+    if(h$mainLoopImmediate) return;
+    h$clearScheduleMainLoop();
+    if(h$delayed.size() === 0) {
+        if(typeof setTimeout !== 'undefined')
+            h$mainLoopTimeout = setTimeout(h$mainLoop, h$gcInterval);
+        return;
     }
-    h$yieldRun = function() { h$running = false; window.postMessage("h$mainLoop", "*"); }
-  })();
-} else if(typeof process !== 'undefined' && process.nextTick) {
-  h$yieldRun = function() {
-    ;
-      h$running = false;
-      setImmediate(h$mainLoop);
-  }
-} else if(typeof setTimeout !== 'undefined') {
-  h$yieldRun = function() {
-    ;
-    h$running = false;
-    setTimeout(h$mainLoop, 0);
-  }
-} else {
-  h$yieldRun = null;
+    var now = Date.now();
+    var delay = Math.min(Math.max(h$delayed.peekPrio()-now, 0), h$gcInterval);
+    if(typeof setTimeout !== 'undefined')
+        h$mainLoopTimeout = setTimeout(h$mainLoop, delay);
+}
+function h$clearScheduleMainLoop() {
+    if(h$mainLoopTimeout) {
+        clearTimeout(h$mainLoopTimeout);
+        h$mainLoopTimeout = null;
+    }
+    if(h$mainLoopImmediate) {
+        clearImmediate(h$mainLoopImmediate);
+        h$mainLoopImmediate = null;
+    }
 }
 function h$startMainLoop() {
-  if(h$yieldRun) {
-    h$yieldRun();
-  } else {
-    h$mainLoop();
-  }
+    ;
+    if(h$running) return;
+    if(typeof setTimeout !== 'undefined') {
+        if(!h$mainLoopImmediate) {
+            h$clearScheduleMainLoop();
+            h$mainLoopImmediate = setImmediate(h$mainLoop);
+        }
+    } else {
+        while(true) h$mainLoop();
+    }
 }
+var h$mainLoopImmediate = null; // immediate id if main loop has been scheduled immediately
+var h$mainLoopTimeout = null; // timeout id if main loop has been scheduled with a timeout
 var h$running = false;
 var h$next = null;
 function h$mainLoop() {
     if(h$running) return;
     h$running = true;
+    h$clearScheduleMainLoop();
     h$runInitStatic();
     h$currentThread = h$next;
     if(h$next !== null) {
@@ -6397,27 +7336,24 @@ function h$mainLoop() {
     do {
         c = h$scheduler(c);
         var scheduled = Date.now();
-        if(c === null) {
+        if(c === null) { // no running threads
+            h$next = null;
             h$running = false;
-            if(typeof setTimeout !== 'undefined') {
-                h$next = null;
-                setTimeout(h$mainLoop, 20);
-                return;
-            } else {
-                while(c === null) { c = h$scheduler(c); }
-            }
+            h$scheduleMainLoop();
+            return;
         }
+        // yield to js after GHCJS_BUSY_YIELD
         if(Date.now() - start > 500) {
             ;
-            if(h$yieldRun) {
-                if(c !== h$reschedule) {
-                    h$suspendCurrentThread(c);
-                }
-                h$next = h$currentThread;
-                h$currentThread = null;
-                return h$yieldRun();
-            }
+            if(c !== h$reschedule) h$suspendCurrentThread(c);
+            h$next = h$currentThread;
+            h$currentThread = null;
+            h$running = false;
+            h$mainLoopImmediate = setImmediate(h$mainLoop);
+            return;
         }
+        // preemptively schedule threads after 10*GHCJS_SCHED_CHECK calls
+        // but not before the end of the scheduling quantum
             while(c !== h$reschedule && Date.now() - scheduled < 25) {
                 count = 0;
                 while(c !== h$reschedule && ++count < 1000) {
@@ -6435,22 +7371,29 @@ function h$mainLoop() {
             }
     } while(true);
 }
+// run the supplied IO action in a new thread
+// returns immediately, thread is started in background
 function h$run(a) {
   ;
   var t = h$fork(a, false);
   h$startMainLoop();
   return t;
 }
+// try to run the supplied IO action synchronously, running the
+// thread to completion, unless it blocks,
+// for example by taking an MVar or threadDelay
+// returns the thing the thread blocked on, null if the thread ran to completion
+// cont :: bool, continue thread asynchronously after h$runSync returns
 function h$runSync(a, cont) {
   h$runInitStatic();
   var c = h$return;
   var t = new h$Thread();
-  t.ccs = h$currentThread.ccs;
+  t.ccs = h$currentThread.ccs; // TODO: not sure about this
   t.isSynchronous = true;
   t.continueAsync = cont;
   var ct = h$currentThread;
   var csp = h$sp;
-  var cr1 = h$r1;
+  var cr1 = h$r1; // do we need to save more than this?
   t.stack[4] = h$ap_1_0;
   t.stack[5] = a;
   t.stack[6] = h$return;
@@ -6486,10 +7429,11 @@ function h$runSync(a, cont) {
       var b = t.blockedOn;
       if(typeof b === 'object' && b && b.f && b.f.t === h$BLACKHOLE_CLOSURE) {
         var bhThread = b.d1;
-        if(bhThread === ct || bhThread === t) {
+        if(bhThread === ct || bhThread === t) { // hit a blackhole from running thread or ourselves
           ;
           c = h$throw(h$baseZCControlziExceptionziBasezinonTermination, false);
-        } else {
+        } else { // blackhole from other thread, steal it if thread is running
+          // switch to that thread
           if(h$runBlackholeThreadSync(b)) {
             ;
             c = h$stack[h$sp];
@@ -6522,6 +7466,8 @@ function h$runSync(a, cont) {
   return blockedOn;
   ;
 }
+// run other threads synchronously until the blackhole is 'freed'
+// returns true for success, false for failure, a thread blocks
 function h$runBlackholeThreadSync(bh) {
   ;
   var ct = h$currentThread;
@@ -6529,6 +7475,7 @@ function h$runBlackholeThreadSync(bh) {
   var success = false;
   var bhs = [];
   var currentBh = bh;
+  // we don't handle async exceptions here, don't run threads with pending exceptions
   if(bh.d1.excep.length > 0) {
     return false;
   }
@@ -6546,7 +7493,7 @@ function h$runBlackholeThreadSync(bh) {
         c = c();
         c = c();
       }
-      if(c === h$reschedule) {
+      if(c === h$reschedule) { // perhaps new blackhole, then continue with that thread, otherwise fail
         if(typeof h$currentThread.blockedOn === 'object' &&
            h$currentThread.blockedOn.f &&
            h$currentThread.blockedOn.f.t === h$BLACKHOLE_CLOSURE) {
@@ -6564,7 +7511,7 @@ function h$runBlackholeThreadSync(bh) {
           ;
           break;
         }
-      } else {
+      } else { // blackhole updated: suspend thread and pick up the old one
         ;
         ;
         h$suspendCurrentThread(c);
@@ -6582,6 +7529,7 @@ function h$runBlackholeThreadSync(bh) {
       }
     }
   } catch(e) { }
+  // switch back to original thread
   h$sp = sp;
   h$stack = ct.stack;
   h$currentThread = ct;
@@ -6591,11 +7539,14 @@ function h$syncThreadState(tid) {
   return (tid.isSynchronous ? 1 : 0) |
          (tid.continueAsync ? 2 : 0);
 }
+// run the supplied IO action in a main thread
+// (program exits when this thread finishes)
 function h$main(a) {
   var t = new h$Thread();
   t.ccs = a.cc;
-  t.stack[0] = h$doneMain;
-  if((typeof process !== 'undefined' && process.exit) || typeof quit !== 'undefined') {
+  //TRACE_SCHEDULER("sched: starting main thread");
+    t.stack[0] = h$doneMain;
+  if(!h$isBrowser) {
     t.stack[2] = h$baseZCGHCziTopHandlerzitopHandler;
   }
   t.stack[4] = h$ap_1_0;
@@ -6610,16 +7561,19 @@ function h$main(a) {
   h$startMainLoop();
   return t;
 }
+// MVar support
 var h$mvarId = 0;
+/** @constructor */
 function h$MVar() {
   ;
   this.val = null;
   this.readers = new h$Queue();
   this.writers = new h$Queue();
-  this.waiters = null;
-  this.m = 0;
+  this.waiters = null; // waiting for a value in the MVar with ReadMVar
+  this.m = 0; // gc mark
   this.id = ++h$mvarId;
 }
+// set the MVar to empty unless there are writers
 function h$notifyMVarEmpty(mv) {
   var w = mv.writers.dequeue();
   if(w !== null) {
@@ -6627,6 +7581,7 @@ function h$notifyMVarEmpty(mv) {
     var val = w[1];
     ;
     mv.val = val;
+    // thread is null if some JavaScript outside Haskell wrote to the MVar
     if(thread !== null) {
       h$wakeupThread(thread);
     }
@@ -6636,6 +7591,7 @@ function h$notifyMVarEmpty(mv) {
   }
   ;
 }
+// set the MVar to val unless there are readers
 function h$notifyMVarFull(mv,val) {
   if(mv.waiters && mv.waiters.length > 0) {
     for(var i=0;i<mv.waiters.length;i++) {
@@ -6722,6 +7678,7 @@ function h$tryPutMVar(mv,val) {
     return 1;
   }
 }
+// box up a JavaScript value and write it to the MVar synchronously
 function h$writeMVarJs1(mv,val) {
   var v = h$c1(h$data1_e, val);
   if(mv.val !== null) {
@@ -6742,6 +7699,8 @@ function h$writeMVarJs2(mv,val1,val2) {
     h$notifyMVarFull(mv,v);
   }
 }
+// IORef support
+/** @constructor */
 function h$MutVar(v) {
     this.val = v;
     this.m = 0;
@@ -6751,11 +7710,13 @@ function h$atomicModifyMutVar(mv, fun) {
   mv.val = h$c1(h$select1_e, thunk);
   return h$c1(h$select2_e, thunk);
 }
+// Black holes and updates
+// caller must save registers on stack
 function h$blockOnBlackhole(c) {
   ;
   if(c.d1 === h$currentThread) {
     ;
-    return h$throw(h$baseZCControlziExceptionziBasezinonTermination, false);
+    return h$throw(h$baseZCControlziExceptionziBasezinonTermination, false); // is this an async exception?
   }
   ;
   if(c.d2 === null) {
@@ -6770,23 +7731,30 @@ function h$resumeBlockOnBlackhole(c) {
   h$r1 = c;
   return h$ap_0_0_fast();
 }
+// async exception happened in a black hole, make a thunk
+// to resume the computation
+// var h$debugResumableId = 0;
 function h$makeResumable(bh,start,end,extra) {
   var s = h$stack.slice(start,end+1);
   if(extra) {
     s = s.concat(extra);
   }
+//  TRACE_SCHEDULER("making resumable " + (h$debugResumableId+1) + ", stack: ");
+//  h$dumpStackTop(s,0,s.length-1);
   bh.f = h$resume_e;
   bh.d1 = s;
   bh.d2 = null;
+  //  bh.d2 = ++h$debugResumableId;
 }
 var h$enabled_capabilities = h$newByteArray(4);
 h$enabled_capabilities.i3[0] = 1;
 function h$rtsSupportsBoundThreads() {
   return 0;
 }
+// async foreign calls
 function h$mkForeignCallback(x) {
     return function() {
-        if(x.mv === null) {
+        if(x.mv === null) { // callback called synchronously
             x.mv = arguments;
         } else {
             h$notifyMVarFull(x.mv, h$c1(h$data1_e, arguments));
@@ -6794,6 +7762,7 @@ function h$mkForeignCallback(x) {
         }
     }
 }
+// event listeners through MVar
 function h$makeMVarListener(mv, stopProp, stopImmProp, preventDefault) {
   var f = function(event) {
     ;
@@ -6805,48 +7774,60 @@ function h$makeMVarListener(mv, stopProp, stopImmProp, preventDefault) {
   f.root = mv;
   return f;
 }
+// software transactional memory
 var h$stmTransactionActive = 0;
 var h$stmTransactionWaiting = 4;
+/** @constructor */
 function h$Transaction(o, parent) {
     ;
     this.action = o;
+    // h$TVar -> h$WrittenTVar, transaction-local changed values
     this.tvars = new h$Map();
+    // h$TVar -> h$LocalTVar, all local tvars accessed anywhere in the transaction
     this.accessed = parent===null?new h$Map():parent.accessed;
+    // nonnull while running a check, contains read variables in this part of the transaction
     this.checkRead = parent===null?null:parent.checkRead;
     this.parent = parent;
     this.state = h$stmTransactionActive;
-    this.invariants = [];
-    this.m = 0;
+    this.invariants = []; // invariants added in this transaction
+    this.m = 0; // gc mark
 }
 var h$stmInvariantN = 0;
+/** @constructor */
 function h$StmInvariant(a) {
     this.action = a;
     this._key = ++h$stmInvariantN;
 }
+/** @constructor */
 function h$WrittenTVar(tv,v) {
     this.tvar = tv;
     this.val = v;
 }
 var h$TVarN = 0;
+/** @constructor */
 function h$TVar(v) {
     ;
-    this.val = v;
-    this.blocked = new h$Set();
-    this.invariants = null;
-    this.m = 0;
-    this._key = ++h$TVarN;
+    this.val = v; // current value
+    this.blocked = new h$Set(); // threads that get woken up if this TVar is updated
+    this.invariants = null; // invariants that use this TVar (h$Set)
+    this.m = 0; // gc mark
+    this._key = ++h$TVarN; // for storing in h$Map/h$Set
 }
+/** @constructor */
 function h$TVarsWaiting(s) {
-  this.tvars = s;
+  this.tvars = s; // h$Set of TVars we're waiting on
 }
+/** @constructor */
 function h$LocalInvariant(o) {
   this.action = o;
   this.dependencies = new h$Set();
 }
+// local view of a TVar
+/** @constructor */
 function h$LocalTVar(v) {
   ;
-  this.readVal = v.val;
-  this.val = v.val;
+  this.readVal = v.val; // the value when read from environment
+  this.val = v.val; // the current uncommitted value
   this.tvar = v;
 }
 function h$atomically(o) {
@@ -6872,17 +7853,19 @@ function h$stmAddTVarInvariant(tv, inv) {
     if(tv.invariants === null) tv.invariants = new h$Set();
     tv.invariants.add(inv);
 }
+// commit current transaction,
+// if it's top-level, commit the TVars, otherwise commit to parent
 function h$stmCommitTransaction() {
     var t = h$currentThread.transaction;
     var tvs = t.tvars;
     var wtv, i = tvs.iter();
-    if(t.parent === null) {
+    if(t.parent === null) { // top-level commit
         ;
         while((wtv = i.nextVal()) !== null) h$stmCommitTVar(wtv.tvar, wtv.val);
         for(var j=0;j<t.invariants.length;j++) {
             h$stmCommitInvariant(t.invariants[j]);
         }
-    } else {
+    } else { // commit subtransaction
         ;
         var tpvs = t.parent.tvars;
         while((wtv = i.nextVal()) !== null) tpvs.put(wtv.tvar, wtv);
@@ -6900,11 +7883,13 @@ function h$stmValidateTransaction() {
 function h$stmAbortTransaction() {
   h$currentThread.transaction = h$currentThread.transaction.parent;
 }
+// add an invariant
 function h$stmCheck(o) {
   h$currentThread.transaction.invariants.push(new h$LocalInvariant(o));
   return false;
 }
 function h$stmRetry() {
+  // unwind stack to h$atomically_e or h$stmCatchRetry_e frame
   while(h$sp > 0) {
     var f = h$stack[h$sp];
     if(f === h$atomically_e || f === h$stmCatchRetry_e) {
@@ -6915,7 +7900,7 @@ function h$stmRetry() {
       size = ((h$stack[h$sp-1] >> 8) + 2);
     } else {
       var tag = f.gtag;
-      if(tag < 0) {
+      if(tag < 0) { // dynamic size
         size = h$stack[h$sp-1];
       } else {
         size = (tag & 0xff) + 1;
@@ -6923,10 +7908,11 @@ function h$stmRetry() {
     }
     h$sp -= size;
   }
+  // either h$sp == 0 or at a handler
   if(h$sp > 0) {
     if(f === h$atomically_e) {
       return h$stmSuspendRetry();
-    } else {
+    } else { // h$stmCatchRetry_e
       var b = h$stack[h$sp-1];
       h$stmAbortTransaction();
       h$sp -= 2;
@@ -6942,8 +7928,8 @@ function h$stmSuspendRetry() {
     var tvs = new h$Set();
     while((tv = i.next()) !== null) {
         ;
-        tv.tvar.blocked.add(h$currentThread);
-        tvs.add(tv.tvar);
+        tv.blocked.add(h$currentThread);
+        tvs.add(tv);
     }
     waiting = new h$TVarsWaiting(tvs);
     h$blockThread(h$currentThread, waiting);
@@ -6976,6 +7962,8 @@ function h$writeTVar(tv, v) {
 function h$sameTVar(tv1, tv2) {
   return tv1 === tv2;
 }
+// get the local value of the TVar in the transaction t
+// tvar is added to the read set
 function h$readLocalTVar(t, tv) {
   if(t.checkRead !== null) {
     t.checkRead.add(tv);
@@ -7040,6 +8028,7 @@ function h$stmCommitTVar(tv, v) {
         tv.val = v;
     }
 }
+// remove the thread from the queues of the TVars in s
 function h$stmRemoveBlockedThread(s, thread) {
     var tv, i = s.tvars.iter();
     while((tv = i.next()) !== null) {
@@ -7053,10 +8042,13 @@ function h$stmCommitInvariant(localInv) {
         h$stmAddTVarInvariant(dep, inv);
     }
 }
+// Used definitions: GHCJS_TRACE_PROF, GHCJS_ASSERT_PROF and GHCJS_PROF_GUI
 var h$ccList = [];
 var h$ccsList = [];
 var h$CCUnique = 0;
+/** @constructor */
 function h$CC(label, module, srcloc, isCaf) {
+  //TRACE("h$CC(", label, ", ", module, ", ", srcloc, ", ", isCaf, ")");
   this.label = label;
   this.module = module;
   this.srcloc = srcloc;
@@ -7067,7 +8059,9 @@ function h$CC(label, module, srcloc, isCaf) {
   h$ccList.push(this);
 }
 var h$CCSUnique = 0;
+/** @constructor */
 function h$CCS(parent, cc) {
+  //TRACE("h$mkCCS(", parent, cc, ")");
   if (parent !== null && parent.consed.has(cc)) {
     return (parent.consed.get(cc));
   }
@@ -7088,12 +8082,15 @@ function h$CCS(parent, cc) {
   this.sccCount = 0;
   this.timeTicks = 0;
   this.memAlloc = 0;
-  this.retained = 0;
-  this.inheritedRetain= 0;
+  this.retained = 0; // retained object count, counted in last GC cycle
+  this.inheritedRetain= 0; // inherited retained counts
   this.inheritedTicks = 0;
   this.inheritedAlloc = 0;
-  h$ccsList.push(this);
+  h$ccsList.push(this); /* we need all ccs for statistics, not just the root ones */
 }
+//
+// Built-in cost-centres and stacks
+//
 var h$CC_MAIN = new h$CC("MAIN", "MAIN", "<built-in>", false);
 var h$CC_SYSTEM = new h$CC("SYSTEM", "SYSTEM", "<built-in>", false);
 var h$CC_GC = new h$CC("GC", "GC", "<built-in>", false);
@@ -7110,6 +8107,9 @@ var h$CCS_DONT_CARE = new h$CCS(h$CCS_MAIN, h$CC_DONT_CARE);
 var h$CCS_PINNED = new h$CCS(h$CCS_MAIN, h$CC_PINNED);
 var h$CCS_IDLE = new h$CCS(h$CCS_MAIN, h$CC_IDLE);
 var h$CAF = new h$CCS(h$CCS_MAIN, h$CAF_cc);
+//
+// Cost-centre entries, SCC
+//
 function h$pushRestoreCCS() {
     ;
     if(h$stack[h$sp] !== h$setCcs_e) {
@@ -7128,24 +8128,31 @@ function h$enterThunkCCS(ccsthunk) {
   ;
   h$currentThread.ccs = ccsthunk;
 }
-function h$enterFunCCS(ccsapp,
-                       ccsfn
+function h$enterFunCCS(ccsapp, // stack at call site
+                       ccsfn // stack of function
                        ) {
   ;
   ;
   ;
   ;
+  // common case 1: both stacks are the same
   if (ccsapp === ccsfn) {
     return;
   }
+  // common case 2: the function stack is empty, or just CAF
   if (ccsfn.prevStack === h$CCS_MAIN) {
     return;
   }
+  // FIXME: do we need this?
   h$currentThread.ccs = h$CCS_OVERHEAD;
+  // common case 3: the stacks are completely different (e.g. one is a
+  // descendent of MAIN and the other of a CAF): we append the whole
+  // of the function stack to the current CCS.
   if (ccsfn.root !== ccsapp.root) {
     h$currentThread.ccs = h$appendCCS(ccsapp, ccsfn);
     return;
   }
+  // uncommon case 4: ccsapp is deeper than ccsfn
   if (ccsapp.depth > ccsfn.depth) {
     var tmp = ccsapp;
     var dif = ccsapp.depth - ccsfn.depth;
@@ -7155,10 +8162,12 @@ function h$enterFunCCS(ccsapp,
     h$currentThread.ccs = h$enterFunEqualStacks(ccsapp, tmp, ccsfn);
     return;
   }
+  // uncommon case 5: ccsfn is deeper than CCCS
   if (ccsfn.depth > ccsapp.depth) {
     h$currentThread.ccs = h$enterFunCurShorter(ccsapp, ccsfn, ccsfn.depth - ccsapp.depth);
     return;
   }
+  // uncommon case 6: stacks are equal depth, but different
   h$currentThread.ccs = h$enterFunEqualStacks(ccsapp, ccsapp, ccsfn);
 }
 function h$appendCCS(ccs1, ccs2) {
@@ -7166,6 +8175,7 @@ function h$appendCCS(ccs1, ccs2) {
     return ccs1;
   }
   if (ccs2 === h$CCS_MAIN || ccs2.cc.isCaf) {
+    // stop at a CAF element
     return ccs1;
   }
   return h$pushCostCentre(h$appendCCS(ccs1, ccs2.prevStack), ccs2.cc);
@@ -7187,6 +8197,7 @@ function h$enterFunEqualStacks(ccs0, ccsapp, ccsfn) {
 function h$pushCostCentre(ccs, cc) {
   ;
   if (ccs === null) {
+    // when is ccs null?
     return new h$CCS(ccs, cc);
   }
   if (ccs.cc === cc) {
@@ -7207,12 +8218,16 @@ function h$checkLoop(ccs, cc) {
   }
   return null;
 }
-var h$ccsCC_offset = 4;
-var h$ccsPrevStackOffset = 8;
-var h$ccLabel_offset = 4;
-var h$ccModule_offset = 8;
-var h$ccsrcloc_offset = 12;
+//
+// Emulating pointers for cost-centres and cost-centre stacks
+//
+var h$ccsCC_offset = 4; // ccs->cc
+var h$ccsPrevStackOffset = 8; // ccs->prevStack
+var h$ccLabel_offset = 4; // cc->label
+var h$ccModule_offset = 8; // cc->module
+var h$ccsrcloc_offset = 12; // cc->srcloc
 function h$buildCCPtr(o) {
+  // last used offset is 12, so we need to allocate 20 bytes
   ;
   var cc = h$newByteArray(20);
   cc.arr = [];
@@ -7223,14 +8238,23 @@ function h$buildCCPtr(o) {
 }
 function h$buildCCSPtr(o) {
   ;
+  // last used offset is 8, allocate 16 bytes
   var ccs = h$newByteArray(16);
   ccs.arr = [];
   if (o.prevStack !== null) {
     ccs.arr[h$ccsPrevStackOffset] = [h$buildCCSPtr(o.prevStack), 0];
   }
+  // FIXME: we may need this part:
+  // else {
+  //   ccs.arr[h$ccsPrevStackOffset] = [null, 0];
+  // }
   ccs.arr[h$ccsCC_offset] = [h$buildCCPtr(o.cc), 0];
   return ccs;
 }
+//
+// Updating and printing retained obj count of stacks, to be used in GC scan
+//
+// reset retained object counts
 function h$resetRetained() {
   for (var i = 0; i < h$ccsList.length; i++) {
     var ccs = h$ccsList[i];
@@ -7239,6 +8263,9 @@ function h$resetRetained() {
   }
 }
 function h$updRetained(obj) {
+  // h$gc visits all kinds of objects, not just heap objects
+  // so we're checking if the object has cc field
+  // assuming we added cc field to every heap object, this should work correctly
   if (obj.cc !== undefined) {
     ;
     obj.cc.retained++;
@@ -7270,22 +8297,322 @@ function h$printRetainedInfo() {
   }
   console.log("END");
 }
+// Profiling GUI
+function h$includePolymer() {
+  var platformScript = document.createElement("script");
+  platformScript.setAttribute("src", "polymer-components/platform/platform.js");
+  var progressLink = document.createElement("link");
+  progressLink.setAttribute("rel", "import");
+  progressLink.setAttribute("href", "polymer-components/paper-progress/paper-progress.html");
+  var overlayLink = document.createElement("link");
+  overlayLink.setAttribute("rel", "import");
+  overlayLink.setAttribute("href", "polymer-components/core-overlay/core-overlay.html");
+  var head = document.getElementsByTagName("head")[0];
+  head.appendChild(platformScript);
+  head.appendChild(progressLink);
+  head.appendChild(overlayLink);
+}
+function h$addCSS() {
+  var style = document.createElement("style");
+  var css =
+    "      #ghcjs-prof-container {        width: 1600px;        height: 80%;        overflow: scroll;        height: 300px;      }      .ghcjs-prof-column-left { width: 20%; }      .ghcjs-prof-column-center { width: 5%; }      .ghcjs-prof-column-right { width: 70%; }      .ghcjs-prof-progress {        padding: 10px;        display: block;        width: 100%;      }      .ghcjs-prof-progress.pink::shadow #activeProgress {        background-color: #e91e63;      }      .ghcjs-prof-progress.pink::shadow #secondaryProgress {        background-color: #f8bbd0;      }      #ghcjs-prof-overlay {        box-sizing: border-box;        -moz-box-sizing: border-box;        font-family: Arial, Helvetica, sans-serif;        font-size: 13px;        -webkit-user-select: none;        -moz-user-select: none;        overflow: hidden;        background: white;        padding: 30px 42px;        outline: 1px solid rgba(0,0,0,0.2);        box-shadow: 0 4px 16px rgba(0,0,0,0.2);      }    ";
+  if (style.styleSheet) {
+    style.styleSheet.cssText = css;
+  } else {
+    style.appendChild(document.createTextNode(css));
+  }
+  document.getElementsByTagName("head")[0].appendChild(style);
+}
+function h$addOverlayDOM() {
+  var overlay = document.createElement("core-overlay");
+  overlay.setAttribute("id", "ghcjs-prof-overlay");
+  var h2 = document.createElement("h2");
+  h2.appendChild(document.createTextNode("Retained object counts per CSS"));
+  overlay.appendChild(h2);
+  var div = document.createElement("div");
+  div.setAttribute("flex", "");
+  div.setAttribute("id", "ghcjs-prof-container");
+  var ul = document.createElement("ul");
+  ul.setAttribute("flex", "");
+  ul.setAttribute("id", "ghcjs-prof-container-ul");
+  div.appendChild(ul);
+  overlay.appendChild(div);
+  var button = document.createElement("button");
+  button.setAttribute("core-overlay-toggle", "");
+  button.appendChild(document.createTextNode("Close"));
+  overlay.appendChild(button);
+  document.getElementsByTagName("body")[0].appendChild(overlay);
+}
+// Return id of the div that shows info of given CCS
+function h$mkDivId(ccs) {
+  return (ccs.cc.module + '-' + ccs.cc.label).split('.').join('-');
+}
+function h$mkCCSDOM(ccs) {
+  var ccsLabel = ccs.cc.module + '.' + ccs.cc.label + ' (' + ccs.cc.srcloc + ')';
+  var rowDivId = h$mkDivId(ccs);
+  var leftDiv = document.createElement("div");
+  leftDiv.setAttribute("class", "ghcjs-prof-column-left");
+  leftDiv.appendChild(document.createTextNode(ccsLabel));
+  var midDiv = document.createElement("div");
+  midDiv.setAttribute("class", "ghcjs-prof-column-center");
+  midDiv.appendChild(document.createTextNode("0"));
+  var rightDiv = document.createElement("div");
+  rightDiv.setAttribute("class", "ghcjs-prof-column-right");
+  var bar = document.createElement("paper-progress");
+  bar.setAttribute("value", "0");
+  bar.setAttribute("min", "0");
+  bar.setAttribute("max", "1000");
+  bar.setAttribute("class", "ghcjs-prof-progress");
+  rightDiv.appendChild(bar);
+  ccs.domElems = {
+    leftDiv: leftDiv,
+    midDiv: midDiv,
+    rightDiv: rightDiv,
+    bar: bar
+  };
+  var rowDiv = document.createElement("div");
+  rowDiv.setAttribute("layout", "");
+  rowDiv.setAttribute("horizontal", "");
+  rowDiv.appendChild(leftDiv);
+  rowDiv.appendChild(midDiv);
+  rowDiv.appendChild(rightDiv);
+  var ul = document.createElement("ul");
+  var div = document.createElement("div");
+  div.setAttribute("layout", "");
+  div.setAttribute("vertical", "");
+  div.setAttribute("id", rowDivId);
+  div.appendChild(rowDiv);
+  div.appendChild(ul);
+  return div;
+}
+function h$addCCSDOM() {
+  var ul = document.getElementById("ghcjs-prof-container-ul");
+  for (var i = 0; i < h$ccsList.length; i++)
+    ul.appendChild(h$mkCCSDOM(h$ccsList[i]));
+}
+function h$updateDOMs() {
+  for (var i = 0; i < h$ccsList.length; i++) {
+    var ccs = h$ccsList[i];
+    if (ccs.prevStack === null || ccs.prevStack === undefined) {
+      h$inheritRetained(ccs);
+      ccs.domElems.midDiv.innerHTML = ccs.inheritedRetain;
+      ccs.domElems.bar.setAttribute("value", ccs.inheritedRetain);
+    }
+  }
+  var stack = [];
+  for (var ccsIdx = 0; ccsIdx < h$ccsList.length; ccsIdx++) {
+    var ccs = h$ccsList[ccsIdx];
+    if (ccs.prevStack === null || ccs.prevStack === undefined) {
+      // push initial values to the stack
+      for (var j = 0; j < ccs.consed.values().length; j++)
+        stack.push(ccs.consed.values()[j]);
+      var val = stack.pop();
+      while (val !== undefined) {
+        // push children stack frames to the stack
+        for (var j = 0; j < val.consed.values().length; j++)
+          stack.push(val.consed.values()[j]);
+        var divId = h$mkDivId(val);
+        var div = document.getElementById(divId);
+        if (div === null) {
+          var div = h$mkCCSDOM(val);
+          var parentDivId = h$mkDivId(val.prevStack);
+          var parentDiv = document.getElementById(parentDivId);
+          var ul = parentDiv.children[parentDiv.children.length - 1];
+          ul.appendChild(h$mkCCSDOM(val));
+        } else {
+          val.domElems.midDiv.innerHTML = val.inheritedRetain;
+          val.domElems.bar.setAttribute("value", val.inheritedRetain);
+        }
+        // reload current value
+        val = stack.pop();
+      }
+    }
+  }
+  h$sortDOMs(document.getElementById("ghcjs-prof-container-ul"));
+}
+function h$sortDOMs(parent) {
+  var items = [];
+  var children = parent.children;
+  while (parent.firstChild)
+      items.push(parent.removeChild(parent.firstChild));
+  // sort child nodes first
+  for (var i = 0; i < items.length; i++)
+    h$sortDOMs(items[i].children[1]);
+  items.sort(function (a, b) {
+    var midDivA = a.children[0].children[1];
+    var midDivB = b.children[0].children[1];
+    return (parseInt(midDivB.innerHTML) - parseInt(midDivA.innerHTML));
+  });
+  for (var i = 0; i < items.length; i++)
+    parent.appendChild(items[i]);
+}
+function h$toggleProfGUI() {
+  document.getElementById("ghcjs-prof-overlay").toggle();
+}
+document.addEventListener("DOMContentLoaded", h$includePolymer);
+document.addEventListener("DOMContentLoaded", h$addCSS);
+document.addEventListener("DOMContentLoaded", h$addOverlayDOM);
+document.addEventListener("DOMContentLoaded", h$addCCSDOM);
+// Copyright 2011 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+/**
+ * @fileoverview Abstract cryptographic hash interface.
+ *
+ * See goog.crypt.Sha1 and goog.crypt.Md5 for sample implementations.
+ *
+ */
 goog.provide('goog.crypt.Hash');
+/**
+ * Create a cryptographic hash instance.
+ *
+ * @constructor
+ */
 goog.crypt.Hash = function() {};
+/**
+ * Resets the internal accumulator.
+ */
 goog.crypt.Hash.prototype.reset = goog.abstractMethod;
+/**
+ * Adds a byte array (array with values in [0-255] range) or a string (might
+ * only contain 8-bit, i.e., Latin1 characters) to the internal accumulator.
+ *
+ * Many hash functions operate on blocks of data and implement optimizations
+ * when a full chunk of data is readily available. Hence it is often preferable
+ * to provide large chunks of data (a kilobyte or more) than to repeatedly
+ * call the update method with few tens of bytes. If this is not possible, or
+ * not feasible, it might be good to provide data in multiplies of hash block
+ * size (often 64 bytes). Please see the implementation and performance tests
+ * of your favourite hash.
+ *
+ * @param {Array.<number>|Uint8Array|string} bytes Data used for the update.
+ * @param {number=} opt_length Number of bytes to use.
+ */
 goog.crypt.Hash.prototype.update = goog.abstractMethod;
+/**
+ * @return {!Array.<number>} The finalized hash computed
+ *     from the internal accumulator.
+ */
 goog.crypt.Hash.prototype.digest = goog.abstractMethod;
+// Copyright 2011 The Closure Library Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS-IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+/**
+ * @fileoverview MD5 cryptographic hash.
+ * Implementation of http://tools.ietf.org/html/rfc1321 with common
+ * optimizations and tweaks (see http://en.wikipedia.org/wiki/MD5).
+ *
+ * Usage:
+ *   var md5 = new goog.crypt.Md5();
+ *   md5.update(bytes);
+ *   var hash = md5.digest();
+ *
+ * Performance:
+ *   Chrome 23              ~680 Mbit/s
+ *   Chrome 13 (in a VM)    ~250 Mbit/s
+ *   Firefox 6.0 (in a VM)  ~100 Mbit/s
+ *   IE9 (in a VM)           ~27 Mbit/s
+ *   Firefox 3.6             ~15 Mbit/s
+ *   IE8 (in a VM)           ~13 Mbit/s
+ *
+ */
 goog.provide('goog.crypt.Md5');
 goog.require('goog.crypt.Hash');
+/**
+ * MD5 cryptographic hash constructor.
+ * @constructor
+ * @extends {goog.crypt.Hash}
+ */
 goog.crypt.Md5 = function() {
   goog.base(this);
+  /**
+   * Holds the current values of accumulated A-D variables (MD buffer).
+   * @type {Array.<number>}
+   * @private
+   */
   this.chain_ = new Array(4);
+  /**
+   * A buffer holding the data until the whole block can be processed.
+   * @type {Array.<number>}
+   * @private
+   */
   this.block_ = new Array(64);
+  /**
+   * The length of yet-unprocessed data as collected in the block.
+   * @type {number}
+   * @private
+   */
   this.blockLength_ = 0;
+  /**
+   * The total length of the message so far.
+   * @type {number}
+   * @private
+   */
   this.totalLength_ = 0;
   this.reset();
 };
 goog.inherits(goog.crypt.Md5, goog.crypt.Hash);
+/**
+ * Integer rotation constants used by the abbreviated implementation.
+ * They are hardcoded in the unrolled implementation, so it is left
+ * here commented out.
+ * @type {Array.<number>}
+ * @private
+ *
+goog.crypt.Md5.S_ = [
+  7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
+  5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
+  4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
+  6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21
+];
+ */
+/**
+ * Sine function constants used by the abbreviated implementation.
+ * They are hardcoded in the unrolled implementation, so it is left
+ * here commented out.
+ * @type {Array.<number>}
+ * @private
+ *
+goog.crypt.Md5.T_ = [
+  0xd76aa478, 0xe8c7b756, 0x242070db, 0xc1bdceee,
+  0xf57c0faf, 0x4787c62a, 0xa8304613, 0xfd469501,
+  0x698098d8, 0x8b44f7af, 0xffff5bb1, 0x895cd7be,
+  0x6b901122, 0xfd987193, 0xa679438e, 0x49b40821,
+  0xf61e2562, 0xc040b340, 0x265e5a51, 0xe9b6c7aa,
+  0xd62f105d, 0x02441453, 0xd8a1e681, 0xe7d3fbc8,
+  0x21e1cde6, 0xc33707d6, 0xf4d50d87, 0x455a14ed,
+  0xa9e3e905, 0xfcefa3f8, 0x676f02d9, 0x8d2a4c8a,
+  0xfffa3942, 0x8771f681, 0x6d9d6122, 0xfde5380c,
+  0xa4beea44, 0x4bdecfa9, 0xf6bb4b60, 0xbebfbc70,
+  0x289b7ec6, 0xeaa127fa, 0xd4ef3085, 0x04881d05,
+  0xd9d4d039, 0xe6db99e5, 0x1fa27cf8, 0xc4ac5665,
+  0xf4292244, 0x432aff97, 0xab9423a7, 0xfc93a039,
+  0x655b59c3, 0x8f0ccc92, 0xffeff47d, 0x85845dd1,
+  0x6fa87e4f, 0xfe2ce6e0, 0xa3014314, 0x4e0811a1,
+  0xf7537e82, 0xbd3af235, 0x2ad7d2bb, 0xeb86d391
+];
+ */
+/** @override */
 goog.crypt.Md5.prototype.reset = function() {
   this.chain_[0] = 0x67452301;
   this.chain_[1] = 0xefcdab89;
@@ -7294,11 +8621,20 @@ goog.crypt.Md5.prototype.reset = function() {
   this.blockLength_ = 0;
   this.totalLength_ = 0;
 };
+/**
+ * Internal compress helper function. It takes a block of data (64 bytes)
+ * and updates the accumulator.
+ * @param {Array.<number>|Uint8Array|string} buf The block to compress.
+ * @param {number=} opt_offset Offset of the block in the buffer.
+ * @private
+ */
 goog.crypt.Md5.prototype.compress_ = function(buf, opt_offset) {
   if (!opt_offset) {
     opt_offset = 0;
   }
+  // We allocate the array every time, but it's cheap in practice.
   var X = new Array(16);
+  // Get 16 little endian words. It is not worth unrolling this for Chrome 11.
   if (goog.isString(buf)) {
     for (var i = 0; i < 16; ++i) {
       X[i] = (buf.charCodeAt(opt_offset++)) |
@@ -7319,6 +8655,42 @@ goog.crypt.Md5.prototype.compress_ = function(buf, opt_offset) {
   var C = this.chain_[2];
   var D = this.chain_[3];
   var sum = 0;
+  /*
+   * This is an abbreviated implementation, it is left here commented out for
+   * reference purposes. See below for an unrolled version in use.
+   *
+  var f, n, tmp;
+  for (var i = 0; i < 64; ++i) {
+
+    if (i < 16) {
+      f = (D ^ (B & (C ^ D)));
+      n = i;
+    } else if (i < 32) {
+      f = (C ^ (D & (B ^ C)));
+      n = (5 * i + 1) % 16;
+    } else if (i < 48) {
+      f = (B ^ C ^ D);
+      n = (3 * i + 5) % 16;
+    } else {
+      f = (C ^ (B | (~D)));
+      n = (7 * i) % 16;
+    }
+
+    tmp = D;
+    D = C;
+    C = B;
+    sum = (A + f + goog.crypt.Md5.T_[i] + X[n]) & 0xffffffff;
+    B += ((sum << goog.crypt.Md5.S_[i]) & 0xffffffff) |
+         (sum >>> (32 - goog.crypt.Md5.S_[i]));
+    A = tmp;
+  }
+   */
+  /*
+   * This is an unrolled MD5 implementation, which gives ~30% speedup compared
+   * to the abbreviated implementation above, as measured on Chrome 11. It is
+   * important to keep 32-bit croppings to minimum and inline the integer
+   * rotation.
+   */
   sum = (A + (D ^ (B & (C ^ D))) + X[0] + 0xd76aa478) & 0xffffffff;
   A = B + (((sum << 7) & 0xffffffff) | (sum >>> 25));
   sum = (D + (C ^ (A & (B ^ C))) + X[1] + 0xe8c7b756) & 0xffffffff;
@@ -7452,15 +8824,23 @@ goog.crypt.Md5.prototype.compress_ = function(buf, opt_offset) {
   this.chain_[2] = (this.chain_[2] + C) & 0xffffffff;
   this.chain_[3] = (this.chain_[3] + D) & 0xffffffff;
 };
+/** @override */
 goog.crypt.Md5.prototype.update = function(bytes, opt_length) {
   if (!goog.isDef(opt_length)) {
     opt_length = bytes.length;
   }
   var lengthMinusBlock = opt_length - 64;
+  // Copy some object properties to local variables in order to save on access
+  // time from inside the loop (~10% speedup was observed on Chrome 11).
   var block = this.block_;
   var blockLength = this.blockLength_;
   var i = 0;
+  // The outer while loop should execute at most twice.
   while (i < opt_length) {
+    // When we have no data in the block to top up, we can directly process the
+    // input buffer (assuming it contains sufficient data). This gives ~30%
+    // speedup on Chrome 14 and ~70% speedup on Firefox 6.0, but requires that
+    // the data is provided in large chunks (or in multiples of 64 bytes).
     if (blockLength == 0) {
       while (i <= lengthMinusBlock) {
         this.compress_(bytes, i);
@@ -7473,6 +8853,7 @@ goog.crypt.Md5.prototype.update = function(bytes, opt_length) {
         if (blockLength == 64) {
           this.compress_(block);
           blockLength = 0;
+          // Jump to the outer loop so we use the full-block optimization.
           break;
         }
       }
@@ -7482,6 +8863,7 @@ goog.crypt.Md5.prototype.update = function(bytes, opt_length) {
         if (blockLength == 64) {
           this.compress_(block);
           blockLength = 0;
+          // Jump to the outer loop so we use the full-block optimization.
           break;
         }
       }
@@ -7490,16 +8872,21 @@ goog.crypt.Md5.prototype.update = function(bytes, opt_length) {
   this.blockLength_ = blockLength;
   this.totalLength_ += opt_length;
 };
+/** @override */
 goog.crypt.Md5.prototype.digest = function() {
+  // This must accommodate at least 1 padding byte (0x80), 8 bytes of
+  // total bitlength, and must end at a 64-byte boundary.
   var pad = new Array((this.blockLength_ < 56 ? 64 : 128) - this.blockLength_);
+  // Add padding: 0x80 0x00*
   pad[0] = 0x80;
   for (var i = 1; i < pad.length - 8; ++i) {
     pad[i] = 0;
   }
+  // Add the total number of bits, little endian 64-bit integer.
   var totalBits = this.totalLength_ * 8;
   for (var i = pad.length - 8; i < pad.length; ++i) {
     pad[i] = totalBits & 0xff;
-    totalBits /= 0x100;
+    totalBits /= 0x100; // Don't use bit-shifting here!
   }
   this.update(pad);
   var digest = new Array(16);
@@ -7511,24 +8898,248 @@ goog.crypt.Md5.prototype.digest = function() {
   }
   return digest;
 };
-if(typeof module !== 'undefined' && module.exports) {
-  var h$fs = require('fs');
-}
+/* include/HsBaseConfig.h.  Generated from HsBaseConfig.h.in by configure.  */
+/* include/HsBaseConfig.h.in.  Generated from configure.ac by autoheader.  */
+/* The value of E2BIG. */
+/* The value of EACCES. */
+/* The value of EADDRINUSE. */
+/* The value of EADDRNOTAVAIL. */
+/* The value of EADV. */
+/* The value of EAFNOSUPPORT. */
+/* The value of EAGAIN. */
+/* The value of EALREADY. */
+/* The value of EBADF. */
+/* The value of EBADMSG. */
+/* The value of EBADRPC. */
+/* The value of EBUSY. */
+/* The value of ECHILD. */
+/* The value of ECOMM. */
+/* The value of ECONNABORTED. */
+/* The value of ECONNREFUSED. */
+/* The value of ECONNRESET. */
+/* The value of EDEADLK. */
+/* The value of EDESTADDRREQ. */
+/* The value of EDIRTY. */
+/* The value of EDOM. */
+/* The value of EDQUOT. */
+/* The value of EEXIST. */
+/* The value of EFAULT. */
+/* The value of EFBIG. */
+/* The value of EFTYPE. */
+/* The value of EHOSTDOWN. */
+/* The value of EHOSTUNREACH. */
+/* The value of EIDRM. */
+/* The value of EILSEQ. */
+/* The value of EINPROGRESS. */
+/* The value of EINTR. */
+/* The value of EINVAL. */
+/* The value of EIO. */
+/* The value of EISCONN. */
+/* The value of EISDIR. */
+/* The value of ELOOP. */
+/* The value of EMFILE. */
+/* The value of EMLINK. */
+/* The value of EMSGSIZE. */
+/* The value of EMULTIHOP. */
+/* The value of ENAMETOOLONG. */
+/* The value of ENETDOWN. */
+/* The value of ENETRESET. */
+/* The value of ENETUNREACH. */
+/* The value of ENFILE. */
+/* The value of ENOBUFS. */
+/* The value of ENOCIGAR. */
+/* The value of ENODATA. */
+/* The value of ENODEV. */
+/* The value of ENOENT. */
+/* The value of ENOEXEC. */
+/* The value of ENOLCK. */
+/* The value of ENOLINK. */
+/* The value of ENOMEM. */
+/* The value of ENOMSG. */
+/* The value of ENONET. */
+/* The value of ENOPROTOOPT. */
+/* The value of ENOSPC. */
+/* The value of ENOSR. */
+/* The value of ENOSTR. */
+/* The value of ENOSYS. */
+/* The value of ENOTBLK. */
+/* The value of ENOTCONN. */
+/* The value of ENOTDIR. */
+/* The value of ENOTEMPTY. */
+/* The value of ENOTSOCK. */
+/* The value of ENOTSUP. */
+/* The value of ENOTTY. */
+/* The value of ENXIO. */
+/* The value of EOPNOTSUPP. */
+/* The value of EPERM. */
+/* The value of EPFNOSUPPORT. */
+/* The value of EPIPE. */
+/* The value of EPROCLIM. */
+/* The value of EPROCUNAVAIL. */
+/* The value of EPROGMISMATCH. */
+/* The value of EPROGUNAVAIL. */
+/* The value of EPROTO. */
+/* The value of EPROTONOSUPPORT. */
+/* The value of EPROTOTYPE. */
+/* The value of ERANGE. */
+/* The value of EREMCHG. */
+/* The value of EREMOTE. */
+/* The value of EROFS. */
+/* The value of ERPCMISMATCH. */
+/* The value of ERREMOTE. */
+/* The value of ESHUTDOWN. */
+/* The value of ESOCKTNOSUPPORT. */
+/* The value of ESPIPE. */
+/* The value of ESRCH. */
+/* The value of ESRMNT. */
+/* The value of ESTALE. */
+/* The value of ETIME. */
+/* The value of ETIMEDOUT. */
+/* The value of ETOOMANYREFS. */
+/* The value of ETXTBSY. */
+/* The value of EUSERS. */
+/* The value of EWOULDBLOCK. */
+/* The value of EXDEV. */
+/* The value of O_BINARY. */
+/* The value of SIGINT. */
+/* Define to 1 if you have the `clock_gettime' function. */
+/* #undef HAVE_CLOCK_GETTIME */
+/* Define to 1 if you have the <ctype.h> header file. */
+/* Define if you have epoll support. */
+/* #undef HAVE_EPOLL */
+/* Define to 1 if you have the `epoll_ctl' function. */
+/* #undef HAVE_EPOLL_CTL */
+/* Define to 1 if you have the <errno.h> header file. */
+/* Define to 1 if you have the `eventfd' function. */
+/* #undef HAVE_EVENTFD */
+/* Define to 1 if you have the <fcntl.h> header file. */
+/* Define to 1 if you have the `ftruncate' function. */
+/* Define to 1 if you have the `getclock' function. */
+/* #undef HAVE_GETCLOCK */
+/* Define to 1 if you have the `getrusage' function. */
+/* Define to 1 if you have the <inttypes.h> header file. */
+/* Define to 1 if you have the `iswspace' function. */
+/* Define to 1 if you have the `kevent' function. */
+/* Define to 1 if you have the `kevent64' function. */
+/* Define if you have kqueue support. */
+/* Define to 1 if you have the <langinfo.h> header file. */
+/* Define to 1 if you have libcharset. */
+/* Define to 1 if you have the `rt' library (-lrt). */
+/* #undef HAVE_LIBRT */
+/* Define to 1 if you have the <limits.h> header file. */
+/* Define to 1 if the system has the type `long long'. */
+/* Define to 1 if you have the `lstat' function. */
+/* Define to 1 if you have the <memory.h> header file. */
+/* Define if you have poll support. */
+/* Define to 1 if you have the <poll.h> header file. */
+/* Define to 1 if you have the <signal.h> header file. */
+/* Define to 1 if you have the <stdint.h> header file. */
+/* Define to 1 if you have the <stdlib.h> header file. */
+/* Define to 1 if you have the <strings.h> header file. */
+/* Define to 1 if you have the <string.h> header file. */
+/* Define to 1 if you have the <sys/epoll.h> header file. */
+/* #undef HAVE_SYS_EPOLL_H */
+/* Define to 1 if you have the <sys/eventfd.h> header file. */
+/* #undef HAVE_SYS_EVENTFD_H */
+/* Define to 1 if you have the <sys/event.h> header file. */
+/* Define to 1 if you have the <sys/resource.h> header file. */
+/* Define to 1 if you have the <sys/select.h> header file. */
+/* Define to 1 if you have the <sys/stat.h> header file. */
+/* Define to 1 if you have the <sys/syscall.h> header file. */
+/* Define to 1 if you have the <sys/timeb.h> header file. */
+/* Define to 1 if you have the <sys/timers.h> header file. */
+/* #undef HAVE_SYS_TIMERS_H */
+/* Define to 1 if you have the <sys/times.h> header file. */
+/* Define to 1 if you have the <sys/time.h> header file. */
+/* Define to 1 if you have the <sys/types.h> header file. */
+/* Define to 1 if you have the <sys/utsname.h> header file. */
+/* Define to 1 if you have the <sys/wait.h> header file. */
+/* Define to 1 if you have the <termios.h> header file. */
+/* Define to 1 if you have the `times' function. */
+/* Define to 1 if you have the <time.h> header file. */
+/* Define to 1 if you have the <unistd.h> header file. */
+/* Define to 1 if you have the <utime.h> header file. */
+/* Define to 1 if you have the <wctype.h> header file. */
+/* Define to 1 if you have the <windows.h> header file. */
+/* #undef HAVE_WINDOWS_H */
+/* Define to 1 if you have the <winsock.h> header file. */
+/* #undef HAVE_WINSOCK_H */
+/* Define to 1 if you have the `_chsize' function. */
+/* #undef HAVE__CHSIZE */
+/* Define to Haskell type for cc_t */
+/* Define to Haskell type for char */
+/* Define to Haskell type for clock_t */
+/* Define to Haskell type for dev_t */
+/* Define to Haskell type for double */
+/* Define to Haskell type for float */
+/* Define to Haskell type for gid_t */
+/* Define to Haskell type for ino_t */
+/* Define to Haskell type for int */
+/* Define to Haskell type for intmax_t */
+/* Define to Haskell type for intptr_t */
+/* Define to Haskell type for long */
+/* Define to Haskell type for long long */
+/* Define to Haskell type for mode_t */
+/* Define to Haskell type for nlink_t */
+/* Define to Haskell type for off_t */
+/* Define to Haskell type for pid_t */
+/* Define to Haskell type for ptrdiff_t */
+/* Define to Haskell type for rlim_t */
+/* Define to Haskell type for short */
+/* Define to Haskell type for signed char */
+/* Define to Haskell type for sig_atomic_t */
+/* Define to Haskell type for size_t */
+/* Define to Haskell type for speed_t */
+/* Define to Haskell type for ssize_t */
+/* Define to Haskell type for suseconds_t */
+/* Define to Haskell type for tcflag_t */
+/* Define to Haskell type for time_t */
+/* Define to Haskell type for uid_t */
+/* Define to Haskell type for uintmax_t */
+/* Define to Haskell type for uintptr_t */
+/* Define to Haskell type for unsigned char */
+/* Define to Haskell type for unsigned int */
+/* Define to Haskell type for unsigned long */
+/* Define to Haskell type for unsigned long long */
+/* Define to Haskell type for unsigned short */
+/* Define to Haskell type for useconds_t */
+/* Define to Haskell type for wchar_t */
+/* Define to the address where bug reports for this package should be sent. */
+/* Define to the full name of this package. */
+/* Define to the full name and version of this package. */
+/* Define to the one symbol short name of this package. */
+/* Define to the home page for this package. */
+/* Define to the version of this package. */
+/* The size of `kev.filter', as computed by sizeof. */
+/* The size of `kev.flags', as computed by sizeof. */
+/* The size of `struct MD5Context', as computed by sizeof. */
+/* Define to 1 if you have the ANSI C header files. */
+/* Number of bits in a file offset, on hosts where this is settable. */
+/* #undef _FILE_OFFSET_BITS */
+/* Define for large files, on AIX-style hosts. */
+/* #undef _LARGE_FILES */
+// #define GHCJS_TRACE_IO 1
 function h$base_access(file, file_off, mode, c) {
     ;
-    h$fs.stat(fd, function(err, fs) {
-        if(err) {
-            h$handleErrnoC(err, -1, 0, c);
-        } else {
-            c(mode & fs.mode);
-        }
-    });
+    if(h$isNode) {
+        h$fs.stat(fd, function(err, fs) {
+            if(err) {
+                h$handleErrnoC(err, -1, 0, c);
+            } else {
+                c(mode & fs.mode); // fixme is this ok?
+            }
+        });
+    } else
+        h$unsupported(-1, c);
 }
 function h$base_chmod(file, file_off, mode, c) {
     ;
-    h$fs.chmod(h$decodeUtf8z(file, file_off), mode, function(err) {
-        h$handleErrnoC(err, -1, 0, c);
-    });
+    if(h$isNode) {
+        h$fs.chmod(h$decodeUtf8z(file, file_off), mode, function(err) {
+            h$handleErrnoC(err, -1, 0, c);
+        });
+    } else
+        h$unsupported(-1, c);
 }
 function h$base_close(fd, c) {
     ;
@@ -7548,18 +9159,21 @@ function h$base_dup2(fd, c) {
 }
 function h$base_fstat(fd, stat, stat_off, c) {
     ;
-    h$fs.fstat(fd, function(err, fs) {
-        if(err) {
-            h$handlErrnoC(err, -1, 0, c);
-        } else {
-            h$base_fillStat(fs, stat, stat_off);
-            c(0);
-        }
-    });
+    if(h$isNode) {
+        h$fs.fstat(fd, function(err, fs) {
+            if(err) {
+                h$handlErrnoC(err, -1, 0, c);
+            } else {
+                h$base_fillStat(fs, stat, stat_off);
+                c(0);
+            }
+        });
+    } else
+        h$unsupported(-1, c);
 }
 function h$base_isatty(fd) {
     ;
-    if(typeof process !== 'undefined') {
+    if(h$isNode) {
         if(fd === 0) return process.stdin.isTTY?1:0;
         if(fd === 1) return process.stdout.isTTY?1:0;
         if(fd === 2) return process.stderr.isTTY?1:0;
@@ -7569,96 +9183,104 @@ function h$base_isatty(fd) {
 }
 function h$base_lseek(fd, pos_1, pos_2, whence, c) {
     ;
-    var p = goog.math.Long.fromBits(pos_2, pos_1), p1;
-    var o = h$base_fds[fd];
-    if(!o) {
-        h$errno = CONST_BADF;
-        c(-1,-1);
-    } else {
-        switch(whence) {
-        case 0:
-            o.pos = p.toNumber();
-            c(p.getHighBits(), p.getLowBits());
-            break;
-        case 1:
-            o.pos += p.toNumber();
-            p1 = goog.math.Long.fromNumber(o.pos);
-            c(p1.getHighBits(), p1.getLowBits());
-            break;
-        case 2:
-            h$fs.fstat(fd, function(err, fs) {
-                if(err) {
-                    h$setErrno(err);
-                    c(-1,-1);
-                } else {
-                    o.pos = fs.size + p.toNumber();
-                    p1 = goog.math.Long.fromNumber(o.pos);
-                    c(p1.getHighBits(), p1.getLowBits());
-                }
-            });
-            break;
-        default:
-            h$errno = 22;
+    if(h$isNode) {
+        var p = goog.math.Long.fromBits(pos_2, pos_1), p1;
+        var o = h$base_fds[fd];
+        if(!o) {
+            h$errno = CONST_BADF;
             c(-1,-1);
+        } else {
+            switch(whence) {
+            case 0: /* SET */
+                o.pos = p.toNumber();
+                c(p.getHighBits(), p.getLowBits());
+                break;
+            case 1: /* CUR */
+                o.pos += p.toNumber();
+                p1 = goog.math.Long.fromNumber(o.pos);
+                c(p1.getHighBits(), p1.getLowBits());
+                break;
+            case 2: /* END */
+                h$fs.fstat(fd, function(err, fs) {
+                    if(err) {
+                        h$setErrno(err);
+                        c(-1,-1);
+                    } else {
+                        o.pos = fs.size + p.toNumber();
+                        p1 = goog.math.Long.fromNumber(o.pos);
+                        c(p1.getHighBits(), p1.getLowBits());
+                    }
+                });
+                break;
+            default:
+                h$errno = 22;
+                c(-1,-1);
+            }
         }
+    } else {
+        h$unsupported();
+        c(-1, -1);
     }
 }
 function h$base_lstat(file, file_off, stat, stat_off, c) {
     ;
-    h$fs.lstat(h$decodeUtf8z(file, file_off), function(err, fs) {
-        if(err) {
-            h$handleErrnoC(err, -1, 0, c);
-        } else {
-            h$base_fillStat(fs, stat, stat_off);
-            c(0);
-        }
-    });
+    if(h$isNode) {
+        h$fs.lstat(h$decodeUtf8z(file, file_off), function(err, fs) {
+            if(err) {
+                h$handleErrnoC(err, -1, 0, c);
+            } else {
+                h$base_fillStat(fs, stat, stat_off);
+                c(0);
+            }
+        });
+    } else
+        h$unsupported(-1, c);
 }
 function h$base_open(file, file_off, how, mode, c) {
-    var flagStr, off;
-    var fp = h$decodeUtf8z(file, file_off);
-    ;
-    var acc = how & h$base_o_accmode;
-    var excl = (how & h$base_o_excl) ? 'x' : '';
-    if(acc === h$base_o_rdonly) {
-        read = true;
-        flagStr = 'r' + excl;
-        off = 0;
-    } else if(acc === h$base_o_wronly) {
-        write = true;
-        flagStr = (how & h$base_o_trunc ? 'w' : 'a') + excl + '+';
-        off = -1;
-    } else {
-        off = 0;
-        read = true;
-        write = true;
-        if(how & h$base_o_creat) {
-            flagStr = ((how & h$base_o_trunc) ? 'w' : 'a') + excl + '+';
-        } else {
-            flagStr = 'r+';
+    if(h$isNode) {
+        var flags, off;
+        var fp = h$decodeUtf8z(file, file_off);
+        var acc = how & h$base_o_accmode;
+        // passing a number lets node.js use it directly as the flags (undocumented)
+        if(acc === h$base_o_rdonly) {
+            read = true;
+            flags = h$processConstants['O_RDONLY'];
+        } else if(acc === h$base_o_wronly) {
+            write = true;
+            flags = h$processConstants['O_WRONLY'];
+        } else { // r+w
+            read = true;
+            write = true;
+            flags = h$processConstants['O_RDWR'];
         }
-    }
-    h$fs.open(fp, flagStr, mode, function(err, fd) {
-        if(err) {
-            h$handleErrnoC(err, -1, 0, c);
-        } else {
-            var f = function(p) {
-                h$base_fds[fd] = { read: h$base_readFile
-                                 , write: h$base_writeFile
-                                 , close: h$base_closeFile
-                                 , pos: p
-                                 };
-                c(fd);
-            }
-            if(off === -1) {
-                h$fs.stat(fp, function(err, fs) {
-                    if(err) h$handleErrnoC(err, -1, 0, c); else f(fs.size);
-                });
+        off = (how & h$base_o_append) ? -1 : 0;
+        flags = flags | ((how & h$base_o_trunc) ? h$processConstants['O_TRUNC'] : 0)
+                      | ((how & h$base_o_creat) ? h$processConstants['O_CREAT'] : 0)
+                      | ((how & h$base_o_excl) ? h$processConstants['O_EXCL'] : 0)
+                      | ((how & h$base_o_append) ? h$processConstants['O_APPEND'] : 0);
+        h$fs.open(fp, flags, mode, function(err, fd) {
+            if(err) {
+                h$handleErrnoC(err, -1, 0, c);
             } else {
-                f(0);
+                var f = function(p) {
+                    h$base_fds[fd] = { read: h$base_readFile
+                                       , write: h$base_writeFile
+                                       , close: h$base_closeFile
+                                       , pos: p
+                                     };
+                    c(fd);
+                }
+                if(off === -1) {
+                    h$fs.stat(fp, function(err, fs) {
+                        if(err) h$handleErrnoC(err, -1, 0, c); else f(fs.size);
+                    });
+                } else {
+                    f(0);
+                }
             }
-        }
-    });
+        });
+    } else
+        h$unsupported(-1, c);
 }
 function h$base_read(fd, buf, buf_off, n, c) {
     ;
@@ -7672,18 +9294,22 @@ function h$base_read(fd, buf, buf_off, n, c) {
 }
 function h$base_stat(file, file_off, stat, stat_off, c) {
     ;
-    h$fs.stat(h$decodeUtf8z(file, file_off), function(err, fs) {
-        if(err) {
-            h$handlErrnoC(err, -1, 0, c);
-        } else {
-            h$base_fillStat(fs, stat, stat_off);
-            c(0);
-        }
-    });
+    if(h$isNode) {
+        h$fs.stat(h$decodeUtf8z(file, file_off), function(err, fs) {
+            if(err) {
+                h$handlErrnoC(err, -1, 0, c);
+            } else {
+                h$base_fillStat(fs, stat, stat_off);
+                c(0);
+            }
+        });
+    } else
+        h$unsupported(-1, c);
 }
 function h$base_umask(mode) {
     ;
-    return process.umask(mode);
+    if(h$isNode) return process.umask(mode);
+    return 0;
 }
 function h$base_write(fd, buf, buf_off, n, c) {
     ;
@@ -7697,37 +9323,50 @@ function h$base_write(fd, buf, buf_off, n, c) {
 }
 function h$base_ftruncate(fd, pos_1, pos_2, c) {
     ;
-    h$fs.ftruncate(fd, goog.math.Long.fromBits(pos_2, pos_1).toNumber(), function(err) {
-        h$handleErrnoC(err, -1, 0, c);
-    });
+    if(h$isNode) {
+        h$fs.ftruncate(fd, goog.math.Long.fromBits(pos_2, pos_1).toNumber(), function(err) {
+            h$handleErrnoC(err, -1, 0, c);
+        });
+    } else
+        h$unsupported(-1, c);
 }
 function h$base_unlink(file, file_off, c) {
     ;
-    h$fs.unlink(h$decodeUtf8z(file, file_off), function(err) {
-        h$handleErrnoC(err, -1, 0, c);
-    });
+    if(h$isNode) {
+        h$fs.unlink(h$decodeUtf8z(file, file_off), function(err) {
+            h$handleErrnoC(err, -1, 0, c);
+        });
+    } else
+        h$unsupported(-1, c);
 }
 function h$base_getpid() {
     ;
-    return process.pid;
+    if(h$isNode) return process.pid;
+    return 0;
 }
 function h$base_link(file1, file1_off, file2, file2_off, c) {
     ;
-    h$fs.link(h$decodeUtf8z(file1, file1_off), h$decodeUtf8z(file2, file2_off), function(err) {
-        h$handleErrnoC(err, -1, 0, c);
-    });
+    if(h$isNode) {
+        h$fs.link(h$decodeUtf8z(file1, file1_off), h$decodeUtf8z(file2, file2_off), function(err) {
+            h$handleErrnoC(err, -1, 0, c);
+        });
+    } else
+        h$unsupported(-1, c);
 }
 function h$base_mkfifo(file, file_off, mode, c) {
     throw "h$base_mkfifo";
 }
 function h$base_sigemptyset(sigset, sigset_off) {
     return 0;
+    // throw "h$base_sigemptyset";
 }
 function h$base_sigaddset(sigset, sigset_off, sig) {
     return 0;
+    // throw "h$base_sigaddset";
 }
 function h$base_sigprocmask(sig, sigset1, sigset1_off, sigset2, sigset2_off) {
     return 0;
+    // throw "h$base_sigprocmask";
 }
 function h$base_tcgetattr(attr, termios, termios_off) {
     return 0;
@@ -7737,37 +9376,40 @@ function h$base_tcsetattr(attr, val, termios, termios_off) {
 }
 function h$base_utime(file, file_off, timbuf, timbuf_off, c) {
     ;
-    h$fs.fstat(h$decodeUtf8z(file, file_off), function(err, fs) {
-        if(err) {
-            h$handleErrnoC(err, 0, -1, c);
-        } else {
-            var atime = goog.math.Long.fromNumber(fs.atime.getTime());
-            var mtime = goog.math.Long.fromNumber(fs.mtime.getTime());
-            var ctime = goog.math.Long.fromNumber(fs.ctime.getTime());
-            timbuf.i3[0] = atime.getHighBits();
-            timbuf.i3[1] = atime.getLowBits();
-            timbuf.i3[2] = mtime.getHighBits();
-            timbuf.i3[3] = mtime.getLowBits();
-            timbuf.i3[4] = ctime.getHighBits();
-            timbuf.i3[5] = ctime.getLowBits();
-            c(0);
-        }
-    });
+    if(h$isNode) {
+        h$fs.fstat(h$decodeUtf8z(file, file_off), function(err, fs) {
+            if(err) {
+                h$handleErrnoC(err, 0, -1, c); // fixme
+            } else {
+                var atime = goog.math.Long.fromNumber(fs.atime.getTime());
+                var mtime = goog.math.Long.fromNumber(fs.mtime.getTime());
+                var ctime = goog.math.Long.fromNumber(fs.ctime.getTime());
+                timbuf.i3[0] = atime.getHighBits();
+                timbuf.i3[1] = atime.getLowBits();
+                timbuf.i3[2] = mtime.getHighBits();
+                timbuf.i3[3] = mtime.getLowBits();
+                timbuf.i3[4] = ctime.getHighBits();
+                timbuf.i3[5] = ctime.getLowBits();
+                c(0);
+            }
+        });
+    } else
+        h$unsupported(-1, c);
 }
 function h$base_waitpid(pid, stat, stat_off, options, c) {
     throw "h$base_waitpid";
 }
-var h$base_o_rdonly = 0x00000;
-var h$base_o_wronly = 0x00001;
-var h$base_o_rdwr = 0x00002;
-var h$base_o_accmode = 0x00003;
-var h$base_o_append = 0x00008;
-var h$base_o_creat = 0x00200;
-var h$base_o_trunc = 0x00400;
-var h$base_o_excl = 0x00800;
-var h$base_o_noctty = 0x20000;
-var h$base_o_nonblock = 0x00004;
-var h$base_o_binary = 0x00000;
+/** @const */ var h$base_o_rdonly = 0x00000;
+/** @const */ var h$base_o_wronly = 0x00001;
+/** @const */ var h$base_o_rdwr = 0x00002;
+/** @const */ var h$base_o_accmode = 0x00003;
+/** @const */ var h$base_o_append = 0x00008;
+/** @const */ var h$base_o_creat = 0x00200;
+/** @const */ var h$base_o_trunc = 0x00400;
+/** @const */ var h$base_o_excl = 0x00800;
+/** @const */ var h$base_o_noctty = 0x20000;
+/** @const */ var h$base_o_nonblock = 0x00004;
+/** @const */ var h$base_o_binary = 0x00000;
 function h$base_c_s_isreg(mode) {
     return 1;
 }
@@ -7778,7 +9420,7 @@ function h$base_c_s_isblk(mode) {
     return 0;
 }
 function h$base_c_s_isdir(mode) {
-    return 0;
+    return 0; // fixme
 }
 function h$base_c_s_isfifo(mode) {
     return 0;
@@ -7790,14 +9432,15 @@ function h$base_fillStat(fs, b, off) {
     var s = goog.math.Long.fromNumber(fs.size);
     b.i3[o+1] = s.getHighBits();
     b.i3[o+2] = s.getLowBits();
-    b.i3[o+3] = 0;
-    b.i3[o+4] = 0;
+    b.i3[o+3] = 0; // fixme
+    b.i3[o+4] = 0; // fixme
     b.i3[o+5] = fs.dev;
     b.i3[o+6] = fs.ino;
     b.i3[o+7] = fs.uid;
     b.i3[o+8] = fs.gid;
 }
-var h$base_sizeof_stat = 36;
+// [mode,size1,size2,mtime1,mtime2,dev,ino,uid,gid] all 32 bit
+/** @const */ var h$base_sizeof_stat = 36;
 function h$base_st_mtime(stat, stat_off) {
     h$ret1 = stat.i3[(stat_off>>2)+4];
     return stat.i3[(stat_off>>2)+3];
@@ -7815,21 +9458,21 @@ function h$base_st_dev(stat, stat_off) {
 function h$base_st_ino(stat, stat_off) {
     return stat.i3[(stat_off>>2)+6];
 }
-var h$base_echo = 1;
-var h$base_tcsanow = 2;
-var h$base_icanon = 4;
-var h$base_vmin = 8;
-var h$base_vtime = 16;
-var h$base_sigttou = 0;
-var h$base_sig_block = 0;
-var h$base_sig_setmask = 0;
-var h$base_f_getfl = 0;
-var h$base_f_setfl = 0;
-var h$base_f_setfd = 0;
-var h$base_fd_cloexec = 0;
-var h$base_sizeof_termios = 4;
-var h$base_sizeof_sigset_t = 4;
-var h$base_lflag = 0;
+/** @const */ var h$base_echo = 1;
+/** @const */ var h$base_tcsanow = 2;
+/** @const */ var h$base_icanon = 4;
+/** @const */ var h$base_vmin = 8;
+/** @const */ var h$base_vtime = 16;
+/** @const */ var h$base_sigttou = 0;
+/** @const */ var h$base_sig_block = 0;
+/** @const */ var h$base_sig_setmask = 0;
+/** @const */ var h$base_f_getfl = 0;
+/** @const */ var h$base_f_setfl = 0;
+/** @const */ var h$base_f_setfd = 0;
+/** @const */ var h$base_fd_cloexec = 0;
+/** @const */ var h$base_sizeof_termios = 4;
+/** @const */ var h$base_sizeof_sigset_t = 4;
+/** @const */ var h$base_lflag = 0;
 function h$base_poke_lflag(termios, termios_off, flag) {
     return 0;
 }
@@ -7837,13 +9480,13 @@ function h$base_ptr_c_cc(termios, termios_off) {
     h$ret1 = 0;
     return h$newByteArray(8);
 }
-var h$base_default_buffer_size = 32768;
+/** @const */ var h$base_default_buffer_size = 32768;
 function h$base_c_s_issock(mode) {
-    return 0;
+    return 0; // fixme
 }
-var h$base_SEEK_SET = 0;
-var h$base_SEEK_CUR = 1;
-var h$base_SEEK_END = 2;
+/** @const */ var h$base_SEEK_SET = 0;
+/** @const */ var h$base_SEEK_CUR = 1;
+/** @const */ var h$base_SEEK_END = 2;
 function h$base_set_saved_termios(a, b, c) {
     h$ret1 = 0
     return null;
@@ -7852,6 +9495,7 @@ function h$base_get_saved_termios(r) {
     h$ret1 = 0;
     return null;
 }
+// fixme
 function h$lockFile(fd, dev, ino, for_writing) {
     ;
     return 0;
@@ -7860,35 +9504,36 @@ function h$unlockFile(fd) {
     ;
     return 0;
 }
+// engine-dependent setup
 var h$base_readStdin, h$base_writeStderr, h$base_writeStdout;
 var h$base_readFile, h$base_writeFile, h$base_closeFile;
-if(typeof module !== 'undefined' && module.exports) {
-    var h$base_stdin_waiting = new h$Queue();
-    var h$base_stdin_chunk = { buf: null
-                               , pos: 0
-                               , processing: false
-                               };
-    var h$base_stdin_eof = false;
-    var h$base_process_stdin = function() {
-        var c = h$base_stdin_chunk;
-        var q = h$base_stdin_waiting;
-        if(!q.length() || c.processing) return;
-        c.processing = true;
-        if(!c.buf) { c.pos = 0; c.buf = process.stdin.read(); }
-        while(c.buf && q.length()) {
-            var x = q.dequeue();
-            var n = Math.min(c.buf.length - c.pos, x.n);
-            for(var i=0;i<n;i++) {
-                x.buf.u8[i+x.off] = c.buf[c.pos+i];
-            }
-            c.pos += n;
-            x.c(n);
-            if(c.pos >= c.buf.length) c.buf = null;
-            if(!c.buf && q.length()) { c.pos = 0; c.buf = process.stdin.read(); }
+var h$base_stdin_waiting = new h$Queue();
+var h$base_stdin_chunk = { buf: null
+                           , pos: 0
+                           , processing: false
+                           };
+var h$base_stdin_eof = false;
+var h$base_process_stdin = function() {
+    var c = h$base_stdin_chunk;
+    var q = h$base_stdin_waiting;
+    if(!q.length() || c.processing) return;
+    c.processing = true;
+    if(!c.buf) { c.pos = 0; c.buf = process.stdin.read(); }
+    while(c.buf && q.length()) {
+        var x = q.dequeue();
+        var n = Math.min(c.buf.length - c.pos, x.n);
+        for(var i=0;i<n;i++) {
+            x.buf.u8[i+x.off] = c.buf[c.pos+i];
         }
-        while(h$base_stdin_eof && q.length()) q.dequeue().c(0);
-        c.processing = false;
+        c.pos += n;
+        x.c(n);
+        if(c.pos >= c.buf.length) c.buf = null;
+        if(!c.buf && q.length()) { c.pos = 0; c.buf = process.stdin.read(); }
     }
+    while(h$base_stdin_eof && q.length()) q.dequeue().c(0);
+    c.processing = false;
+}
+if(h$isNode) {
     h$base_closeFile = function(fd, fdo, c) {
         h$fs.close(fd, function(err) {
             delete h$base_fds[fd];
@@ -7944,7 +9589,7 @@ if(typeof module !== 'undefined' && module.exports) {
     }
     process.stdin.on('readable', h$base_process_stdin);
     process.stdin.on('end', function() { h$base_stdin_eof = true; h$base_process_stdin(); });
-} else if (typeof putstr !== 'undefined' && typeof printErr !== 'undefined') {
+} else if (h$isJsShell) {
     h$base_readStdin = function(fd, fdo, buf, buf_offset, n, c) {
         c(0);
     }
@@ -7956,7 +9601,7 @@ if(typeof module !== 'undefined' && module.exports) {
         printErr(h$decodeUtf8(buf, n, buf_offset));
         c(n);
     }
-} else {
+} else { // browser / fallback
     h$base_readStdin = function(fd, fdo, buf, buf_offset, n, c) {
         c(0);
     }
@@ -7972,15 +9617,16 @@ if(typeof module !== 'undefined' && module.exports) {
 var h$base_stdin_fd = { read: h$base_readStdin };
 var h$base_stdout_fd = { write: h$base_writeStdout };
 var h$base_stderr_fd = { write: h$base_writeStderr };
-var h$base_fdN = -1;
+var h$base_fdN = -1; // negative file descriptors are 'virtual'
 var h$base_fds = [h$base_stdin_fd, h$base_stdout_fd, h$base_stderr_fd];
 function h$shutdownHaskellAndExit(code, fast) {
-    if(typeof process !== 'undefined' && process.exit) {
+    if(h$isNode) {
         process.exit(code);
-    } else if(typeof quit !== 'undefined') {
+    } else if(h$isJsShell) {
         quit(code);
     }
 }
+// translated from bytestring cbits/fpstring.c
 function h$fps_reverse(a_v, a_o, b_v, b_o, n) {
     if(n > 0) {
         var au8 = a_v.u8, bu8 = b_v.u8;
@@ -8036,14 +9682,17 @@ function h$fps_memcpy_offsets(dst_d, dst_o, dst_off
                               , src_d, src_o, src_off, n) {
     return memcpy(dst_d, dst_o + dst_off, src_d, src_o + src_off, n);
 }
-var h$_hs_bytestring_digits = [48,49,50,51,52,53,54,55,56,57,97,98,99,100,101,102];
+// translated from bytestring cbits/itoa.c
+var h$_hs_bytestring_digits = [48,49,50,51,52,53,54,55,56,57,97,98,99,100,101,102]; // 0123456789abcdef
 var h$_hs_bytestring_l10 = goog.math.Long.fromBits(10, 0);
 var h$_hs_bytestring_b10 = h$bigFromInt(10);
+// signed integers
 function h$_hs_bytestring_int_dec(x, buf_d, buf_o) {
     var c, ptr = buf_o, next_free, x_tmp;
     var bu8 = buf_d.u8;
+    // we cannot negate directly as  0 - (minBound :: Int) = minBound
     if(x < 0) {
-        bu8[ptr++] = 45;
+        bu8[ptr++] = 45; // '-'
         buf_o++;
         x_tmp = x;
         x = (x / 10) | 0;
@@ -8055,6 +9704,7 @@ function h$_hs_bytestring_int_dec(x, buf_d, buf_o) {
             x = -x;
         }
     }
+    // encode positive number as little-endian decimal
     do {
         x_tmp = x;
         x = (x / 10) | 0;
@@ -8069,13 +9719,15 @@ function h$_hs_bytestring_int_dec(x, buf_d, buf_o) {
     h$ret1 = next_free;
     return buf_d;
 }
+// signed long long ints (64 bit integers)
 function h$_hs_bytestring_long_long_int_dec(x_a, x_b, buf_d, buf_o) {
     var l10 = h$_hs_bytestring_l10;
     var x = goog.math.Long.fromBits(x_b, x_a);
     var c, ptr = buf_o, next_free;
     var bu8 = buf_d.u8;
+    // we cannot negate directly as  0 - (minBound :: Int) = minBound
     if(x.isNegative()) {
-        bu8[ptr++] = 45;
+        bu8[ptr++] = 45; // '-';
         buf_o++;
         x_tmp = x;
         x = x.div(l10);
@@ -8087,11 +9739,13 @@ function h$_hs_bytestring_long_long_int_dec(x_a, x_b, buf_d, buf_o) {
             x = x.negate();
         }
     }
+    // encode positive number as little-endian decimal
     do {
         x_tmp = x;
         x = x.div(l10);
         bu8[ptr++] = h$_hs_bytestring_digits[x_tmp.subtract(x.multiply(l10))];
     } while (!x.isZero());
+    // reverse written digits
     next_free = ptr--;
     while(buf_o < ptr) {
         c = bu8[ptr];
@@ -8101,6 +9755,7 @@ function h$_hs_bytestring_long_long_int_dec(x_a, x_b, buf_d, buf_o) {
     h$ret1 = next_free;
     return buf_d;
 }
+// unsigned integers
 function h$_hs_bytestring_uint_dec(x, buf_d, buf_o) {
     var c, ptr = buf_o, next_free;
     var bu8 = buf_d.u8;
@@ -8125,11 +9780,13 @@ function h$_hs_bytestring_long_long_uint_dec(x_a, x_b, buf_d, buf_o) {
     var c, ptr = buf_o, next_free;
     var bu8 = buf_d.u8;
     var x = h$bigFromWord64(x_a, x_b), x_tmp;
+    // encode positive number as little-endian decimal
     do {
         x_tmp = x;
         x = x.divide(b10);
         bu8[ptr++] = h$_hs_bytestring_digits[x_tmp.subtract(x.multiply(b10))];
     } while(x.signum() !== 0);
+    // reverse written digits;
     next_free = ptr--;
     while(buf_o < ptr) {
         c = bu8[ptr];
@@ -8139,38 +9796,56 @@ function h$_hs_bytestring_long_long_uint_dec(x_a, x_b, buf_d, buf_o) {
     h$ret1 = next_free;
     return buf_d;
 }
+// Padded, decimal, positive integers for the decimal output of bignums
+///////////////////////////////////////////////////////////////////////
+// Padded (9 digits), decimal, positive int:
+// We will use it with numbers that fit in 31 bits; i.e., numbers smaller than
+// 10^9, as "31 * log 2 / log 10 = 9.33"
 function h$_hs_bytestring_int_dec_padded9(x, buf_d, buf_o) {
     var max_width_int32_dec = 9;
     var ptr = buf_o + max_width_int32_dec;
     var bu8 = buf_d.u8;
     var x_tmp;
+    // encode positive number as little-endian decimal
     do {
         x_tmp = x;
         x = (x / 10) | 0;
         bu8[--ptr] = h$_hs_bytestring_digits[x_tmp - x * 10];
     } while(x);
+    // pad beginning
     while (buf_o < ptr) { bu8[--ptr] = 48; }
 }
+// Padded (19 digits), decimal, positive long long int:
+// We will use it with numbers that fit in 63 bits; i.e., numbers smaller than
+// 10^18, as "63 * log 2 / log 10 = 18.96"
 function h$_hs_bytestring_long_long_int_dec_padded18(x_a, x_b, buf_d, buf_o) {
     var l10 = h$_hs_bytestring_l10;
     var max_width_int64_dec = 18;
     var ptr = buf_o + max_width_int64_dec;
     var bu8 = buf_d.u8;
     var x = goog.math.Long.fromBits(x_b, x_a);
+    // encode positive number as little-endian decimal
     do {
         x_tmp = x;
         x = x.div(l10);
         bu8[--ptr] = h$_hs_bytestring_digits[x_tmp.subtract(x.multiply(l10))];
     } while (!x.isZero());
+    // pad beginning
     while (buf_o < ptr) { bu8[--ptr] = 48; }
 }
+///////////////////////
+// Hexadecimal encoding
+///////////////////////
+// unsigned ints (32 bit words)
 function h$_hs_bytestring_uint_hex(x, buf_d, buf_o) {
     var c, ptr = buf_o, next_free;
     var bu8 = buf_d.u8;
+    // write hex representation in reverse order
     do {
         bu8[ptr++] = h$_hs_bytestring_digits[x & 0xf];
         x >>>= 4;
     } while(x);
+    // invert written digits
     next_free = ptr--;
     while(buf_o < ptr) {
         c = bu8[ptr];
@@ -8180,11 +9855,13 @@ function h$_hs_bytestring_uint_hex(x, buf_d, buf_o) {
     h$ret1 = next_free;
     return buf_d;
 }
+// unsigned long ints (64 bit words)
 function h$_hs_bytestring_long_long_uint_hex(x_a, x_b, buf_d, buf_o) {
+    // write hex representation in reverse order
     var c, ptr = buf_o, next_free;
     var bu8 = buf_d.u8;
     if(x_a === 0 && x_b === 0) {
-        bu8[ptr++] = 48;
+        bu8[ptr++] = 48; // '0'
     } else {
         while(x_b !== 0) {
             bu8[ptr++] = h$_hs_bytestring_digits[x_b & 0xf];
@@ -8195,6 +9872,7 @@ function h$_hs_bytestring_long_long_uint_hex(x_a, x_b, buf_d, buf_o) {
             x_a >>>= 4;
         }
     }
+    // invert written digits
     next_free = ptr--;
     while(buf_o < ptr) {
         c = bu8[ptr];
@@ -8204,12 +9882,19 @@ function h$_hs_bytestring_long_long_uint_hex(x_a, x_b, buf_d, buf_o) {
     h$ret1 = next_free;
     return buf_d;
 }
+// JS Objects stuff
 function h$isFloat (n) {
   return n===+n && n!==(n|0);
 }
 function h$isInteger (n) {
   return n===+n && n===(n|0);
 }
+/*
+        -- 0 - null, 1 - integer,
+        -- 2 - float, 3 - bool,
+        -- 4 - string, 5 - array
+        -- 6 - object
+*/
 function h$typeOf(o) {
     if (!(o instanceof Object)) {
         if (o == null) {
@@ -8227,10 +9912,13 @@ function h$typeOf(o) {
         }
     } else {
         if (Object.prototype.toString.call(o) == '[object Array]') {
+            // it's an array
             return 5;
         } else if (!o) {
+            // null 
             return 0;
         } else {
+            // it's an object
             return 6;
         }
     }
@@ -8252,16 +9940,27 @@ function h$flattenObj(o) {
     }
     return l;
 }
+function h$ghcjs_currentWindow() {
+  return window;
+};
+function h$ghcjs_currentDocument() {
+  return document;
+};
 function h$_hs_text_memcpy(dst_v,dst_o2,src_v,src_o2,n) {
   return h$memcpy(dst_v,2*dst_o2,src_v,2*src_o2,2*n);
 }
 function h$_hs_text_memcmp(a_v,a_o2,b_v,b_o2,n) {
   return h$memcmp(a_v,2*a_o2,b_v,2*b_o2,2*n);
 }
+// decoder below adapted from cbits/cbits.c in the text package
 var h$_text_UTF8_ACCEPT = 0;
 var h$_text_UTF8_REJECT = 12
 var h$_text_utf8d =
    [
+  /*
+   * The first part of the table maps bytes to character classes that
+   * to reduce the size of the transition table and create bitmasks.
+   */
    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
@@ -8270,11 +9969,22 @@ var h$_text_utf8d =
    7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7, 7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,
    8,8,2,2,2,2,2,2,2,2,2,2,2,2,2,2, 2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,
   10,3,3,3,3,3,3,3,3,3,3,3,3,4,3,3, 11,6,6,6,5,8,8,8,8,8,8,8,8,8,8,8,
+  /*
+   * The second part is a transition table that maps a combination of
+   * a state of the automaton and a character class to a state.
+   */
    0,12,24,36,60,96,84,12,12,12,48,72, 12,12,12,12,12,12,12,12,12,12,12,12,
   12, 0,12,12,12,12,12, 0,12, 0,12,12, 12,24,12,12,12,12,12,24,12,24,12,12,
   12,12,12,12,12,12,12,24,12,12,12,12, 12,24,12,12,12,12,12,12,12,24,12,12,
   12,12,12,12,12,12,12,36,12,36,12,12, 12,36,12,12,12,12,12,36,12,36,12,12,
   12,36,12,12,12,12,12,12,12,12,12,12];
+/*
+ * A best-effort decoder. Runs until it hits either end of input or
+ * the start of an invalid byte sequence.
+ *
+ * At exit, updates *destoff with the next offset to write to, and
+ * returns the next source offset to read from.
+ */
 function h$_hs_text_decode_utf8_internal ( dest_v
                                          , destoff_v, destoff_o
                                          , src_v, src_o
@@ -8352,6 +10062,7 @@ function h$_hs_text_decode_utf8( dest_v
                                , src_v, src_o
                                , srcend_v, srcend_o
                                ) {
+  /* Back up if we have an incomplete or invalid encoding */
   var s = { state: h$_text_UTF8_ACCEPT
           , codepoint: 0
           , last: src_o
@@ -8366,15 +10077,22 @@ function h$_hs_text_decode_utf8( dest_v
     h$ret1--;
   return ret;
 }
+/*
+ * The ISO 8859-1 (aka latin-1) code points correspond exactly to the first 256 unicode
+ * code-points, therefore we can trivially convert from a latin-1 encoded bytestring to
+ * an UTF16 array
+ */
 function h$_hs_text_decode_latin1(dest_d, src_d, src_o, srcend_d, srcend_o) {
   var p = src_o;
   var d = 0;
   var su8 = src_d.u8;
   var su3 = src_d.u3;
   var du1 = dest_d.u1;
+  // consume unaligned prefix
   while(p != srcend_o && p & 3) {
     du1[d++] = su8[p++];
   }
+  // iterate over 32-bit aligned loads
   if(su3) {
     while (p < srcend_o - 3) {
       var w = su3[p>>2];
@@ -8385,6 +10103,7 @@ function h$_hs_text_decode_latin1(dest_d, src_d, src_o, srcend_d, srcend_o) {
       p += 4;
     }
   }
+  // handle unaligned suffix
   while (p != srcend_o)
     du1[d++] = su8[p++];
 }
@@ -8399,6 +10118,7 @@ function h$_hs_text_encode_utf8(destp_v, destp_o, src_v, srcoff, srclen) {
   var srcu3 = src_v.u3;
   var destu8 = dest_v.u8;
   while(src < srcend) {
+    // run of (aligned) ascii characters
     while(srcu3 && !(src & 1) && srcend - src >= 2) {
       var w = srcu3[src>>1];
       if(w & 0xFF80FF80) break;
@@ -8410,7 +10130,7 @@ function h$_hs_text_encode_utf8(destp_v, destp_o, src_v, srcoff, srclen) {
       var w = srcu1[src++];
       if(w <= 0x7F) {
         destu8[dest++] = w;
-        break;
+        break; // go back to a stream of ASCII
       } else if(w <= 0x7FF) {
         destu8[dest++] = (w >> 6) | 0xC0;
         destu8[dest++] = (w & 0x3f) | 0x80;

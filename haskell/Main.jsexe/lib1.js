@@ -1,3 +1,5 @@
+// some Enum conversion things
+// an array of generic enums
 var h$enums = [];
 function h$initEnums() {
   for(var i=0;i<256;i++) {
@@ -12,6 +14,7 @@ function h$makeEnum(tag) {
   h$setObjInfo(f, 2, "Enum", [], tag+1, 0, [1], null);
   return h$c0(f, h$CCS_SYSTEM);
 }
+// used for all non-Bool enums
 function h$tagToEnum(tag) {
   if(tag >= h$enums.length) {
     return h$makeEnum(tag);

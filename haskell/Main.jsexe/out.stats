@@ -5,7 +5,7 @@ ghc-prim:                11229
 ghcjs-base-0.1.0.0:      487
 ghcjs-prim:              13549
 integer-gmp:             31714
-main:                    7995
+main:                    8130
 
 
 code size per module:
@@ -72,9 +72,9 @@ integer-gmp
     GHC.Integer.Type:                   31237
 
 main
-    Main:                               7995
+    Main:                               8130
 
 
 
-packed metadata: 310545
+packed metadata: 310474
 
