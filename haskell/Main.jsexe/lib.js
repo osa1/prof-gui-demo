@@ -8472,13 +8472,13 @@ var h$chart;
 function h$createChart() {
   console.log("creating the chart");
   var chartCanvas = document.createElement("canvas");
-  chartCanvas.setAttribute("width", 400);
-  chartCanvas.setAttribute("height", 400);
+  chartCanvas.setAttribute("width", 800);
+  chartCanvas.setAttribute("height", 500);
   chartCanvas.setAttribute("id", "ghcjs-prof-chart");
   document.getElementById("ghcjs-prof-overlay").appendChild(chartCanvas);
   var ctx = chartCanvas.getContext("2d");
   var initialData = {
-    labels: ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+    labels: [],
     datasets: []
   };
   var options = {
@@ -8531,7 +8531,7 @@ function h$updateChart() {
   if (h$chart !== undefined) {
     // FIXME: For some reason, in first iteration h$chart is undefined
     h$chart.addData(newData);
-    while (h$chart.datasets[0].points.length > 10) {
+    while (h$chart.datasets[0].points.length > 50) {
       h$chart.removeData();
     }
   }
