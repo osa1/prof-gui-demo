@@ -8482,6 +8482,8 @@ function h$createChart() {
     datasets: []
   };
   var options = {
+    // Boolean - Whether to animate the chart
+    animation: false,
     // Boolean - Whether grid lines are shown across the chart
     scaleShowGridLines : true,
     // String - Colour of the grid lines
@@ -8491,11 +8493,7 @@ function h$createChart() {
     // Boolean - Whether the line is curved between points
     bezierCurve : false,
     // Boolean - Whether to show a dot for each point
-    pointDot : true,
-    // Number - Radius of each point dot in pixels
-    pointDotRadius : 4,
-    // Number - Pixel width of point dot stroke
-    pointDotStrokeWidth : 1,
+    pointDot : false,
     // Number - amount extra to add to the radius to cater for hit detection outside the drawn point
     pointHitDetectionRadius : 20,
     // Boolean - Whether to show a stroke for datasets
@@ -8533,7 +8531,7 @@ function h$updateChart() {
   if (h$chart !== undefined) {
     // FIXME: For some reason, in first iteration h$chart is undefined
     h$chart.addData(newData);
-    while (h$chart.datasets[0].points.length > 5) {
+    while (h$chart.datasets[0].points.length > 10) {
       h$chart.removeData();
     }
   }
