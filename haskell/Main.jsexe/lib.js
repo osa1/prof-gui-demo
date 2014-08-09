@@ -4542,6 +4542,7 @@ function h$gcQuick(t) {
     }
 }
 // run full marking for threads in h$blocked and h$threads, optionally t if t /= null
+var h$lastCycle = 0;
 function h$gc(t) {
     if(h$currentThread !== null) throw "h$gc: GC can only be run when no thread is running";
     ;
@@ -4603,8 +4604,10 @@ function h$gc(t) {
     h$finalizeDom(); // remove all unreachable DOM retainers
     h$finalizeCAFs(); // restore all unreachable CAFs to unevaluated state
     h$updateDOMs();
+    h$updateChart();
     var now = Date.now();
     h$lastGc = now;
+    h$lastCycle++;
 }
 function h$markRetained() {
     var marked, c, mark = h$gcMark;
@@ -8086,6 +8089,8 @@ function h$CCS(parent, cc) {
   this.inheritedRetain= 0; // inherited retained counts
   this.inheritedTicks = 0;
   this.inheritedAlloc = 0;
+  // for plotting retained obj counts with flot
+  this.plotData = [[h$lastCycle, 0]];
   h$ccsList.push(this); /* we need all ccs for statistics, not just the root ones */
 }
 //
@@ -8271,14 +8276,6 @@ function h$updRetained(obj) {
     obj.cc.retained++;
   }
 }
-function h$ccsString(ccs) {
-  var labels = [];
-  do {
-    labels.push(ccs.cc.module+'.'+ccs.cc.label+' '+ccs.cc.srcloc+' '+ccs.retained+' '+ccs.inheritedRetain);
-    ccs = ccs.prevStack;
-  } while (ccs !== null);
-  return '[' + labels.reverse().join(', ') + ']';
-}
 function h$inheritRetained(ccs) {
   var consedCCS = ccs.consed.values();
   for (var i = 0; i < consedCCS.length; i++) {
@@ -8311,6 +8308,12 @@ function h$includePolymer() {
   head.appendChild(platformScript);
   head.appendChild(progressLink);
   head.appendChild(overlayLink);
+}
+function h$includeChartjs(callback) {
+  var chartjs = document.createElement("script");
+  chartjs.setAttribute("src", "Chart.min.js");
+  document.getElementsByTagName("head")[0].appendChild(chartjs);
+  chartjs.addEventListener("load", callback, false);
 }
 function h$addCSS() {
   var style = document.createElement("style");
@@ -8347,8 +8350,12 @@ function h$addOverlayDOM() {
 function h$mkDivId(ccs) {
   return (ccs.cc.module + '-' + ccs.cc.label).split('.').join('-');
 }
+// String representation of a CCS
+function h$mkCCSLabel(ccs) {
+  return ccs.cc.module + '.' + ccs.cc.label + ' (' + ccs.cc.srcloc + ')';
+}
 function h$mkCCSDOM(ccs) {
-  var ccsLabel = ccs.cc.module + '.' + ccs.cc.label + ' (' + ccs.cc.srcloc + ')';
+  var ccsLabel = h$mkCCSLabel(ccs);
   var rowDivId = h$mkDivId(ccs);
   var leftDiv = document.createElement("div");
   leftDiv.setAttribute("class", "ghcjs-prof-column-left");
@@ -8461,10 +8468,83 @@ function h$sortDOMs(parent) {
 function h$toggleProfGUI() {
   document.getElementById("ghcjs-prof-overlay").toggle();
 }
-document.addEventListener("DOMContentLoaded", h$includePolymer);
-document.addEventListener("DOMContentLoaded", h$addCSS);
-document.addEventListener("DOMContentLoaded", h$addOverlayDOM);
-document.addEventListener("DOMContentLoaded", h$addCCSDOM);
+var h$chart;
+function h$createChart() {
+  console.log("creating the chart");
+  var chartCanvas = document.createElement("canvas");
+  chartCanvas.setAttribute("width", 400);
+  chartCanvas.setAttribute("height", 400);
+  chartCanvas.setAttribute("id", "ghcjs-prof-chart");
+  document.getElementById("ghcjs-prof-overlay").appendChild(chartCanvas);
+  var ctx = chartCanvas.getContext("2d");
+  var initialData = {
+    labels: ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+    datasets: []
+  };
+  var options = {
+    // Boolean - Whether grid lines are shown across the chart
+    scaleShowGridLines : true,
+    // String - Colour of the grid lines
+    scaleGridLineColor : "rgba(0,0,0,.05)",
+    // Number - Width of the grid lines
+    scaleGridLineWidth : 1,
+    // Boolean - Whether the line is curved between points
+    bezierCurve : false,
+    // Boolean - Whether to show a dot for each point
+    pointDot : true,
+    // Number - Radius of each point dot in pixels
+    pointDotRadius : 4,
+    // Number - Pixel width of point dot stroke
+    pointDotStrokeWidth : 1,
+    // Number - amount extra to add to the radius to cater for hit detection outside the drawn point
+    pointHitDetectionRadius : 20,
+    // Boolean - Whether to show a stroke for datasets
+    datasetStroke : false,
+    // Number - Pixel width of dataset stroke
+    datasetStrokeWidth : 2,
+    // Boolean - Whether to fill the dataset with a colour
+    datasetFill : false,
+    // String - A legend template
+    legendTemplate : "<ul class=\"<%=name.toLowerCase()%>-legend\"><% for (var i=0; i<datasets.length; i++){%><li><span style=\"background-color:<%=datasets[i].lineColor%>\"></span><%if(datasets[i].label){%><%=datasets[i].label%><%}%></li><%}%></ul>"
+    //legendTemplate : "<ul class=\"<%=name.toLowerCase()%>-legend\"><% for (var i=0; i<segments.length; i++){%><li><span style=\"background-color:<%=segments[i].fillColor%>\"></span><%if(segments[i].label){%><%=segments[i].label%><%}%></li><%}%></ul>"
+  };
+  h$chart = new Chart(ctx).Line(initialData, options);
+  // load initial data
+  for (var ccsIdx = 0; ccsIdx < h$ccsList.length; ccsIdx++) {
+    var ccs = h$ccsList[ccsIdx];
+    if (ccs.prevStack === null || ccs.prevStack === undefined) {
+      var dataset = {
+        label: h$mkCCSLabel(ccs),
+        data: [0]
+      };
+      h$chart.addDataset(dataset);
+    }
+  }
+}
+function h$updateChart() {
+  var newData = [];
+  for (var ccsIdx = 0; ccsIdx < h$ccsList.length; ccsIdx++) {
+    var ccs = h$ccsList[ccsIdx];
+    if (ccs.prevStack === null || ccs.prevStack === undefined) {
+      // assume inherited retianed counts are calculated
+      newData.push(ccs.inheritedRetain);
+    }
+  }
+  if (h$chart !== undefined) {
+    // FIXME: For some reason, in first iteration h$chart is undefined
+    h$chart.addData(newData);
+    while (h$chart.datasets[0].points.length > 5) {
+      h$chart.removeData();
+    }
+  }
+}
+document.addEventListener("DOMContentLoaded", function () {
+  h$includePolymer();
+  h$includeChartjs(h$createChart);
+  h$addCSS();
+  h$addOverlayDOM();
+  h$addCCSDOM();
+});
 // Copyright 2011 The Closure Library Authors. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
