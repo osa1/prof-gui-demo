@@ -4542,7 +4542,6 @@ function h$gcQuick(t) {
     }
 }
 // run full marking for threads in h$blocked and h$threads, optionally t if t /= null
-var h$lastCycle = 0;
 function h$gc(t) {
     if(h$currentThread !== null) throw "h$gc: GC can only be run when no thread is running";
     ;
@@ -4607,7 +4606,6 @@ function h$gc(t) {
     h$updateChart();
     var now = Date.now();
     h$lastGc = now;
-    h$lastCycle++;
 }
 function h$markRetained() {
     var marked, c, mark = h$gcMark;
@@ -8090,7 +8088,8 @@ function h$CCS(parent, cc) {
   this.inheritedTicks = 0;
   this.inheritedAlloc = 0;
   // for plotting retained obj counts with flot
-  this.plotData = [[h$lastCycle, 0]];
+  this.plotData = [0];
+  this.plotDrawn = true;
   h$ccsList.push(this); /* we need all ccs for statistics, not just the root ones */
 }
 //
@@ -8311,7 +8310,7 @@ function h$includePolymer() {
 }
 function h$includeChartjs(callback) {
   var chartjs = document.createElement("script");
-  chartjs.setAttribute("src", "Chart.min.js");
+  chartjs.setAttribute("src", "Chart.js");
   document.getElementsByTagName("head")[0].appendChild(chartjs);
   chartjs.addEventListener("load", callback, false);
 }
@@ -8468,6 +8467,14 @@ function h$sortDOMs(parent) {
 function h$toggleProfGUI() {
   document.getElementById("ghcjs-prof-overlay").toggle();
 }
+function h$getRandomColor() {
+  var letters = '0123456789ABCDEF'.split('');
+  var color = '#';
+  for (var i = 0; i < 6; i++ ) {
+    color += letters[Math.floor(Math.random() * 16)];
+  }
+  return color;
+}
 var h$chart;
 function h$createChart() {
   console.log("creating the chart");
@@ -8503,37 +8510,77 @@ function h$createChart() {
     // Boolean - Whether to fill the dataset with a colour
     datasetFill : false,
     // String - A legend template
-    legendTemplate : "<ul class=\"<%=name.toLowerCase()%>-legend\"><% for (var i=0; i<datasets.length; i++){%><li><span style=\"background-color:<%=datasets[i].lineColor%>\"></span><%if(datasets[i].label){%><%=datasets[i].label%><%}%></li><%}%></ul>"
-    //legendTemplate : "<ul class=\"<%=name.toLowerCase()%>-legend\"><% for (var i=0; i<segments.length; i++){%><li><span style=\"background-color:<%=segments[i].fillColor%>\"></span><%if(segments[i].label){%><%=segments[i].label%><%}%></li><%}%></ul>"
+    legendTemplate : "<ul class=\"<%=name.toLowerCase()%>-legend\"><% for (var i=0; i<datasets.length; i++){%><li><span style=\"background-color:<%=datasets[i].lineColor%>\"></span><%if(datasets[i].label){%><%=datasets[i].label%><%}%></li><%}%></ul>",
+    // String - Tooltip template
+    multiTooltipTemplate: "<%if (label){%><%=label%>: <%}%><%= value %>",
+    tooltipTemplate: "<%if (label){%><%=label%>: <%}%><%= value %>"
   };
   h$chart = new Chart(ctx).Line(initialData, options);
   // load initial data
   for (var ccsIdx = 0; ccsIdx < h$ccsList.length; ccsIdx++) {
     var ccs = h$ccsList[ccsIdx];
     if (ccs.prevStack === null || ccs.prevStack === undefined) {
+      ccs.plotDrawn = true;
+      var datasetColor = h$getRandomColor();
       var dataset = {
         label: h$mkCCSLabel(ccs),
-        data: [0]
+        data: [0],
+        fillColor: datasetColor,
+        strokeColor: datasetColor,
+        pointColor: datasetColor,
+        pointStrokeColor: "#fff",
+        pointHighlightFill: "#fff",
+        pointHighlightStroke: datasetColor
       };
       h$chart.addDataset(dataset);
     }
   }
 }
 function h$updateChart() {
+  // how many points for a line to show in the chart
+  var points = 10;
   var newData = [];
   for (var ccsIdx = 0; ccsIdx < h$ccsList.length; ccsIdx++) {
     var ccs = h$ccsList[ccsIdx];
     if (ccs.prevStack === null || ccs.prevStack === undefined) {
-      // assume inherited retianed counts are calculated
+      // assume inherited retained counts are calculated
+      ccs.plotData.push(ccs.inheritedRetain);
       newData.push(ccs.inheritedRetain);
     }
   }
   if (h$chart !== undefined) {
     // FIXME: For some reason, in first iteration h$chart is undefined
     h$chart.addData(newData);
-    while (h$chart.datasets[0].points.length > 50) {
+    while (h$chart.datasets[0].points.length > points) {
       h$chart.removeData();
     }
+    // hide lines with 0 allocations for last `points` cycles
+    for (var ccsIdx = 0; ccsIdx < h$ccsList.length; ccsIdx++) {
+      var ccs = h$ccsList[ccsIdx];
+      if (ccs.prevStack === null || ccs.prevStack === undefined) {
+        var draw = false;
+        // number of points to draw
+        var ps = Math.min(ccs.plotData.length, points);
+        // first point to draw
+        var first = ccs.plotData.length - ps;
+        // last point to draw
+        var last = first + ps - 1;
+        for (var i = first; i <= last; i++) {
+          if (ccs.plotData[i] !== 0) {
+            draw = true;
+            break;
+          }
+        }
+        if (draw && !ccs.plotDrawn) {
+          ccs.plotDrawn = true;
+          h$chart.showDataset(h$mkCCSLabel(ccs));
+        } else if (!draw && ccs.plotDrawn) {
+          ccs.plotDrawn = false;
+          h$chart.hideDataset(h$mkCCSLabel(ccs));
+        }
+      }
+    }
+    h$chart.update();
   }
 }
 document.addEventListener("DOMContentLoaded", function () {
