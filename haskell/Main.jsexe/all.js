@@ -4602,7 +4602,6 @@ function h$gc(t) {
     h$scannedWeaks = [];
     h$finalizeDom(); // remove all unreachable DOM retainers
     h$finalizeCAFs(); // restore all unreachable CAFs to unevaluated state
-    h$updateDOMs();
     h$updateChart();
     var now = Date.now();
     h$lastGc = now;
@@ -8044,6 +8043,11 @@ function h$stmCommitInvariant(localInv) {
     }
 }
 // Used definitions: GHCJS_TRACE_PROF, GHCJS_ASSERT_PROF and GHCJS_PROF_GUI
+function assert(condition, message) {
+    if (!condition) {
+        console.trace(message || "Assertion failed");
+    }
+}
 var h$ccList = [];
 var h$ccsList = [];
 var h$CCUnique = 0;
@@ -8089,7 +8093,13 @@ function h$CCS(parent, cc) {
   this.inheritedAlloc = 0;
   // for plotting retained obj counts with flot
   this.plotData = [0];
-  this.plotDrawn = true;
+  // has non-zero allocation counts in last few cycles.
+  // (e.g. it's worth showing)
+  this.active = true;
+  // checkbox status
+  this.hidden = false;
+  // if hidden is true, then it's never shown
+  // if hidden is false, then it's shown only when it's active
   h$ccsList.push(this); /* we need all ccs for statistics, not just the root ones */
 }
 //
@@ -8128,15 +8138,15 @@ function h$restoreCCS(ccs) {
     h$currentThread.ccs = ccs;
 }
 function h$enterThunkCCS(ccsthunk) {
-  ;
+  assert(ccsthunk !== null && ccsthunk !== undefined, "ccsthunk is null or undefined");
   ;
   h$currentThread.ccs = ccsthunk;
 }
 function h$enterFunCCS(ccsapp, // stack at call site
                        ccsfn // stack of function
                        ) {
-  ;
-  ;
+  assert(ccsapp !== null && ccsapp !== undefined, "ccsapp is null or undefined");
+  assert(ccsfn !== null && ccsfn !== undefined, "ccsfn is null or undefined");
   ;
   ;
   // common case 1: both stacks are the same
@@ -8186,15 +8196,15 @@ function h$appendCCS(ccs1, ccs2) {
 }
 function h$enterFunCurShorter(ccsapp, ccsfn, n) {
   if (n === 0) {
-    ;
+    assert(ccsapp.length === ccsfn.length, "ccsapp.length !== ccsfn.length");
     return h$enterFunEqualStacks(ccsapp, ccsapp, ccsfn);
   } else {
-    ;
+    assert(ccsfn.depth > ccsapp.depth, "ccsfn.depth <= ccsapp.depth");
     return h$pushCostCentre(h$enterFunCurShorter(ccsapp, ccsfn.prevStack, n-1), ccsfn.cc);
   }
 }
 function h$enterFunEqualStacks(ccs0, ccsapp, ccsfn) {
-  ;
+  assert(ccsapp.depth === ccsfn.depth, "ccsapp.depth !== ccsfn.depth");
   if (ccsapp === ccsfn) return ccs0;
   return h$pushCostCentre(h$enterFunEqualStacks(ccs0, ccsapp.prevStack, ccsfn.prevStack), ccsfn.cc);
 }
@@ -8232,7 +8242,7 @@ var h$ccModule_offset = 8; // cc->module
 var h$ccsrcloc_offset = 12; // cc->srcloc
 function h$buildCCPtr(o) {
   // last used offset is 12, so we need to allocate 20 bytes
-  ;
+  assert(o !== null);
   var cc = h$newByteArray(20);
   cc.arr = [];
   cc.arr[h$ccLabel_offset] = [h$encodeUtf8(o.label), 0];
@@ -8241,7 +8251,7 @@ function h$buildCCPtr(o) {
   return cc;
 }
 function h$buildCCSPtr(o) {
-  ;
+  assert(o !== null);
   // last used offset is 8, allocate 16 bytes
   var ccs = h$newByteArray(16);
   ccs.arr = [];
@@ -8271,7 +8281,7 @@ function h$updRetained(obj) {
   // so we're checking if the object has cc field
   // assuming we added cc field to every heap object, this should work correctly
   if (obj.cc !== undefined) {
-    ;
+    assert(obj.cc.retained !== null && obj.cc.retained !== undefined);
     obj.cc.retained++;
   }
 }
@@ -8294,6 +8304,19 @@ function h$printRetainedInfo() {
   console.log("END");
 }
 // Profiling GUI
+// There's this problem with adding new data to Chart.js:
+// Let's say in the beginning I have this top-level CCSs:
+//   - CCS1
+//   - CCS2
+// Later a CC is pushed to CCS1 and we had:
+//   - CCS1
+//   - - CCS1.CC
+//   - CCS2
+//  Now I have to add `CCS1.CC` dataset to the chart and then to update
+//  I need to know what index to put `CCS1.CC`s data in update array.
+//  h$lineIdxs keeps track of this.
+//  Note that we don't need to save top-level CCSs indexes.
+h$lineIdxs = new h$Map();
 function h$includePolymer() {
   var platformScript = document.createElement("script");
   platformScript.setAttribute("src", "polymer-components/platform/platform.js");
@@ -8317,7 +8340,7 @@ function h$includeChartjs(callback) {
 function h$addCSS() {
   var style = document.createElement("style");
   var css =
-    "      #ghcjs-prof-container {        height: 80%;        overflow: scroll;        height: 300px;      }      .ghcjs-prof-column-left { width: 20%; }      .ghcjs-prof-column-center { width: 5%; }      .ghcjs-prof-column-right { width: 70%; }      .ghcjs-prof-progress {        padding: 10px;        display: block;        width: 100%;      }      .ghcjs-prof-progress.pink::shadow #activeProgress {        background-color: #e91e63;      }      .ghcjs-prof-progress.pink::shadow #secondaryProgress {        background-color: #f8bbd0;      }      #ghcjs-prof-overlay {        box-sizing: border-box;        -moz-box-sizing: border-box;        font-family: Arial, Helvetica, sans-serif;        font-size: 13px;        -webkit-user-select: none;        -moz-user-select: none;        overflow: hidden;        background: white;        padding: 30px 42px;        outline: 1px solid rgba(0,0,0,0.2);        box-shadow: 0 4px 16px rgba(0,0,0,0.2);        width: 80%;      }    ";
+    "      #ghcjs-prof-container {        height: 600px;        overflow: scroll;      }      #ghcjs-prof-overlay {        box-sizing: border-box;        -moz-box-sizing: border-box;        font-family: Arial, Helvetica, sans-serif;        font-size: 13px;        -webkit-user-select: none;        -moz-user-select: none;        overflow: hidden;        background: white;        padding: 30px 42px;        outline: 1px solid rgba(0,0,0,0.2);        box-shadow: 0 4px 16px rgba(0,0,0,0.2);        width: 80%;      }    ";
   if (style.styleSheet) {
     style.styleSheet.cssText = css;
   } else {
@@ -8334,10 +8357,6 @@ function h$addOverlayDOM() {
   var div = document.createElement("div");
   div.setAttribute("flex", "");
   div.setAttribute("id", "ghcjs-prof-container");
-  var ul = document.createElement("ul");
-  ul.setAttribute("flex", "");
-  ul.setAttribute("id", "ghcjs-prof-container-ul");
-  div.appendChild(ul);
   overlay.appendChild(div);
   var button = document.createElement("button");
   button.setAttribute("core-overlay-toggle", "");
@@ -8353,138 +8372,33 @@ function h$mkDivId(ccs) {
 function h$mkCCSLabel(ccs) {
   return ccs.cc.module + '.' + ccs.cc.label + ' (' + ccs.cc.srcloc + ')';
 }
-function h$mkCCSDOM(ccs) {
-  var ccsLabel = h$mkCCSLabel(ccs);
-  var rowDivId = h$mkDivId(ccs);
-  var leftDiv = document.createElement("div");
-  leftDiv.setAttribute("class", "ghcjs-prof-column-left");
-  leftDiv.appendChild(document.createTextNode(ccsLabel));
-  var midDiv = document.createElement("div");
-  midDiv.setAttribute("class", "ghcjs-prof-column-center");
-  midDiv.appendChild(document.createTextNode("0"));
-  var rightDiv = document.createElement("div");
-  rightDiv.setAttribute("class", "ghcjs-prof-column-right");
-  var bar = document.createElement("paper-progress");
-  bar.setAttribute("value", "0");
-  bar.setAttribute("min", "0");
-  bar.setAttribute("max", "1000");
-  bar.setAttribute("class", "ghcjs-prof-progress");
-  rightDiv.appendChild(bar);
-  ccs.domElems = {
-    leftDiv: leftDiv,
-    midDiv: midDiv,
-    rightDiv: rightDiv,
-    bar: bar
-  };
-  var rowDiv = document.createElement("div");
-  rowDiv.setAttribute("layout", "");
-  rowDiv.setAttribute("horizontal", "");
-  rowDiv.appendChild(leftDiv);
-  rowDiv.appendChild(midDiv);
-  rowDiv.appendChild(rightDiv);
-  var ul = document.createElement("ul");
-  var div = document.createElement("div");
-  div.setAttribute("layout", "");
-  div.setAttribute("vertical", "");
-  div.setAttribute("id", rowDivId);
-  div.appendChild(rowDiv);
-  div.appendChild(ul);
-  return div;
-}
 function h$mkCCSSettingDOM(ccs) {
+  // <li>
+  //   <div>
+  //     <label><checkbox />ccs label</label>
+  //     <ul> ul for children </ul>
+  //   </div>
+  // </li>
   var settingLi = document.createElement("li");
   var settingCheckbox = document.createElement("input");
-  var settingCheckboxLabel = document.createElement("label");
   settingCheckbox.setAttribute("type", "checkbox");
   settingCheckbox.setAttribute("id", h$mkDivId(ccs) + "-enabled");
   settingCheckbox.setAttribute("checked", "");
+  var settingCheckboxLabel = document.createElement("label");
   settingCheckboxLabel.appendChild(settingCheckbox);
   settingCheckboxLabel.appendChild(document.createTextNode(h$mkCCSLabel(ccs)));
+  var childrenUl = document.createElement("ul");
+  childrenUl.setAttribute("id", h$mkDivId(ccs) + "-children");
+  var wrapperDiv = document.createElement("div");
+  wrapperDiv.appendChild(settingCheckboxLabel);
+  wrapperDiv.appendChild(childrenUl);
+  settingLi.appendChild(wrapperDiv);
   settingCheckbox.onchange = function () {
-    var label = h$mkCCSLabel(ccs);
-    if (this.checked) {
-      h$chart.showDataset(label);
-      console.log("enable ccs:", label);
-    } else {
-      console.log("disable ccs:", label);
-      h$chart.hideDataset(label);
-    }
+    ccs.hidden = !this.checked;
+    h$showOrHideCCS(ccs);
+    h$chart.update();
   }
-  settingLi.appendChild(settingCheckboxLabel);
   return settingLi;
-}
-function h$addCCSDOM() {
-  var ul = document.getElementById("ghcjs-prof-container-ul");
-  for (var i = 0; i < h$ccsList.length; i++)
-    ul.appendChild(h$mkCCSDOM(h$ccsList[i]));
-}
-function h$updateDOMs() {
-  for (var i = 0; i < h$ccsList.length; i++) {
-    var ccs = h$ccsList[i];
-    if (ccs.prevStack === null || ccs.prevStack === undefined) {
-      h$inheritRetained(ccs);
-      ccs.domElems.midDiv.innerHTML = ccs.inheritedRetain;
-      ccs.domElems.bar.setAttribute("value", ccs.inheritedRetain);
-    }
-  }
-  var stack = [];
-  for (var ccsIdx = 0; ccsIdx < h$ccsList.length; ccsIdx++) {
-    var ccs = h$ccsList[ccsIdx];
-    if (ccs.prevStack === null || ccs.prevStack === undefined) {
-      // push initial values to the stack
-      for (var j = 0; j < ccs.consed.values().length; j++)
-        stack.push(ccs.consed.values()[j]);
-      var val = stack.pop();
-      while (val !== undefined) {
-        // push children stack frames to the stack
-        for (var j = 0; j < val.consed.values().length; j++)
-          stack.push(val.consed.values()[j]);
-        var divId = h$mkDivId(val);
-        var div = document.getElementById(divId);
-        if (div === null) {
-          var div = h$mkCCSDOM(val);
-          var parentDivId = h$mkDivId(val.prevStack);
-          var parentDiv = document.getElementById(parentDivId);
-          var ul = parentDiv.children[parentDiv.children.length - 1];
-          ul.appendChild(h$mkCCSDOM(val));
-        } else {
-          val.domElems.midDiv.innerHTML = val.inheritedRetain;
-          val.domElems.bar.setAttribute("value", val.inheritedRetain);
-        }
-        // reload current value
-        val = stack.pop();
-      }
-    }
-  }
-  var maxRetained = h$sortDOMs(document.getElementById("ghcjs-prof-container-ul"));
-  // scale the bars
-  for (var ccsIdx = 0; ccsIdx < h$ccsList.length; ccsIdx++) {
-    var ccs = h$ccsList[ccsIdx];
-    ccs.domElems.rightDiv.children[0].setAttribute("max", maxRetained);
-  }
-}
-function h$sortDOMs(parent) {
-  // maximum number of retained objs, to be used in scaling the bars
-  var maxRetained = 0;
-  var items = [];
-  var children = parent.children;
-  while (parent.firstChild)
-      items.push(parent.removeChild(parent.firstChild));
-  // sort child nodes first
-  for (var i = 0; i < items.length; i++)
-    h$sortDOMs(items[i].children[1]);
-  items.sort(function (a, b) {
-    var midDivA = a.children[0].children[1];
-    var midDivB = b.children[0].children[1];
-    return (parseInt(midDivB.innerHTML) - parseInt(midDivA.innerHTML));
-  });
-  for (var i = 0; i < items.length; i++) {
-    var retained = parseInt(items[i].children[0].children[1].innerHTML);
-    if (retained > maxRetained)
-      maxRetained = retained;
-    parent.appendChild(items[i]);
-  }
-  return maxRetained;
 }
 function h$toggleProfGUI() {
   document.getElementById("ghcjs-prof-overlay").toggle();
@@ -8499,7 +8413,6 @@ function h$getRandomColor() {
 }
 var h$chart;
 function h$createChart() {
-  console.log("creating the chart");
   var chartDiv = document.createElement("div");
   chartDiv.setAttribute("horizontal", "");
   chartDiv.setAttribute("layout", "");
@@ -8577,50 +8490,117 @@ function h$createChart() {
   }
 }
 function h$updateChart() {
+  // because of the order callbacks are called, in first iteration
+  // h$chart is sometimes undefined. in that case we're just waiting until
+  // h$chart is created.
+  if (h$chart === undefined)
+    return;
   // how many points for a line to show in the chart
   var points = 10;
+  // number of top-level CCSs
+  var toplevelCCS = 0;
+  // new data to push to the chart
   var newData = [];
+  // add data for top-level CCSs, count top-level CCSs and calculate
+  // inherited retained obj counts
   for (var ccsIdx = 0; ccsIdx < h$ccsList.length; ccsIdx++) {
     var ccs = h$ccsList[ccsIdx];
     if (ccs.prevStack === null || ccs.prevStack === undefined) {
+      h$inheritRetained(ccs);
+      ++toplevelCCS; // TODO: no need to count this in every cycle
       // assume inherited retained counts are calculated
       ccs.plotData.push(ccs.inheritedRetain);
       newData.push(ccs.inheritedRetain);
     }
   }
-  if (h$chart !== undefined) {
-    // FIXME: For some reason, in first iteration h$chart is undefined
-    h$chart.addData(newData);
-    while (h$chart.datasets[0].points.length > points) {
-      h$chart.removeData();
+  // second iteration, process children stacks.
+  // use a stack to make sure parent CCS is processed before children
+  // TODO: maybe replace this with recursion?
+  var stack = [];
+  for (var ccsIdx = 0; ccsIdx < h$ccsList.length; ccsIdx++) {
+    var ccs = h$ccsList[ccsIdx];
+    if (ccs.prevStack === null || ccs.prevStack === undefined) {
+      // top-level CCS, push it's children to the stack manually
+      var consed = ccs.consed.values();
+      for (var j = 0; j < consed.length; j++)
+        stack.push(consed[j]);
     }
-    // hide lines with 0 allocations for last `points` cycles
-    for (var ccsIdx = 0; ccsIdx < h$ccsList.length; ccsIdx++) {
-      var ccs = h$ccsList[ccsIdx];
-      if (ccs.prevStack === null || ccs.prevStack === undefined) {
-        var draw = false;
-        // number of points to draw
-        var ps = Math.min(ccs.plotData.length, points);
-        // first point to draw
-        var first = ccs.plotData.length - ps;
-        // last point to draw
-        var last = first + ps - 1;
-        for (var i = first; i <= last; i++) {
-          if (ccs.plotData[i] !== 0) {
-            draw = true;
-            break;
-          }
-        }
-        if (draw && !ccs.plotDrawn) {
-          ccs.plotDrawn = true;
-          h$chart.showDataset(h$mkCCSLabel(ccs));
-        } else if (!draw && ccs.plotDrawn) {
-          ccs.plotDrawn = false;
-          h$chart.hideDataset(h$mkCCSLabel(ccs));
+  }
+  var val = stack.pop();
+  while (val !== undefined) {
+    // push children stack frames to the stack
+    var consed = val.consed.values();
+    for (var j = 0; j < consed.length; j++)
+      stack.push(consed[j]);
+    // index of cost-centre in the data array
+    var idx;
+    if (h$lineIdxs.has(val)) {
+      // we already saw this CCS before
+      idx = h$lineIdxs.get(val);
+    } else {
+      // we're seeing this CCS for the first time
+      // generate CCS idx and add it to h$lineIdxs
+      idx = h$lineIdxs.size();
+      h$lineIdxs.put(val, idx);
+      // we need to fill new CCS data with zeroes
+      var data = [];
+      for (var i = 0; i < h$chart.datasets[0].points.length; i++)
+        data.push(0);
+      // generate dataset
+      var datasetColor = h$getRandomColor();
+      var newDataset = {
+        label: h$mkCCSLabel(val),
+        data: data,
+        fillColor: datasetColor,
+        strokeColor: datasetColor,
+        pointColor: datasetColor,
+        pointStrokeColor: "#fff",
+        pointHighlightFill: "#fff",
+        pointHighlightStroke: datasetColor
+      };
+      // add dataset to the chart
+      h$chart.addDataset(newDataset);
+      // add checkbox for the CCS
+      document.getElementById(h$mkDivId(ccs.prevStack) + "-children")
+        .appendChild(h$mkCCSSettingDOM(val));
+    }
+    newData[toplevelCCS + idx] = val.inheritedRetain;
+    // reload current value
+    val = stack.pop();
+  }
+  assert(h$chart.datasets.length === h$ccsList.length);
+  assert(newData.length === h$ccsList.length);
+  h$chart.addData(newData);
+  while (h$chart.datasets[0].points.length > points) {
+    h$chart.removeData();
+  }
+  // hide lines with 0 allocations for last `points` cycles
+  for (var ccsIdx = 0; ccsIdx < h$ccsList.length; ccsIdx++) {
+    var ccs = h$ccsList[ccsIdx];
+    if (ccs.prevStack === null || ccs.prevStack === undefined) {
+      ccs.active = false;
+      // number of points to draw
+      var ps = Math.min(ccs.plotData.length, points);
+      // first point to draw
+      var first = ccs.plotData.length - ps;
+      // last point to draw
+      var last = first + ps - 1;
+      for (var i = first; i <= last; i++) {
+        if (ccs.plotData[i] !== 0) {
+          ccs.active = true;
+          break;
         }
       }
     }
-    h$chart.update();
+    h$showOrHideCCS(ccs);
+  }
+  h$chart.update();
+}
+function h$showOrHideCCS(ccs) {
+  if (!ccs.hidden && ccs.active) {
+    h$chart.showDataset(h$mkCCSLabel(ccs));
+  } else {
+    h$chart.hideDataset(h$mkCCSLabel(ccs));
   }
 }
 document.addEventListener("DOMContentLoaded", function () {
@@ -8628,7 +8608,6 @@ document.addEventListener("DOMContentLoaded", function () {
   h$includeChartjs(h$createChart);
   h$addCSS();
   h$addOverlayDOM();
-  h$addCCSDOM();
 });
 // Copyright 2011 The Closure Library Authors. All Rights Reserved.
 //
