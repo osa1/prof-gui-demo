@@ -4602,6 +4602,7 @@ function h$gc(t) {
     h$scannedWeaks = [];
     h$finalizeDom(); // remove all unreachable DOM retainers
     h$finalizeCAFs(); // restore all unreachable CAFs to unevaluated state
+    h$updateDOMs();
     h$updateChart();
     var now = Date.now();
     h$lastGc = now;
@@ -8318,18 +8319,76 @@ function h$printRetainedInfo() {
 //  Note that we don't need to save top-level CCSs indexes.
 h$lineIdxs = new h$Map();
 function h$includePolymer() {
+  var head = document.querySelector("head");
   var platformScript = document.createElement("script");
   platformScript.setAttribute("src", "polymer-components/platform/platform.js");
-  var progressLink = document.createElement("link");
-  progressLink.setAttribute("rel", "import");
-  progressLink.setAttribute("href", "polymer-components/paper-progress/paper-progress.html");
+  head.appendChild(platformScript);
   var overlayLink = document.createElement("link");
   overlayLink.setAttribute("rel", "import");
   overlayLink.setAttribute("href", "polymer-components/core-overlay/core-overlay.html");
-  var head = document.getElementsByTagName("head")[0];
-  head.appendChild(platformScript);
-  head.appendChild(progressLink);
   head.appendChild(overlayLink);
+  var selectionLink = document.createElement("link");
+  selectionLink.setAttribute("rel", "import");
+  selectionLink.setAttribute("href", "polymer-components/core-selection/core-selection.html");
+  head.appendChild(selectionLink);
+  var selectorLink = document.createElement("link");
+  selectorLink.setAttribute("rel", "import");
+  selectorLink.setAttribute("href", "polymer-components/core-selector/core-selector.html");
+  head.appendChild(selectorLink);
+  var pagesLink = document.createElement("link");
+  pagesLink.setAttribute("rel", "import");
+  pagesLink.setAttribute("href", "polymer-components/core-pages/core-pages.html");
+  head.appendChild(pagesLink);
+  var progressLink = document.createElement("link");
+  progressLink.setAttribute("rel", "import");
+  progressLink.setAttribute("href", "polymer-components/paper-progress/paper-progress.html");
+  head.appendChild(progressLink);
+  var rippleLink = document.createElement("link");
+  rippleLink.setAttribute("rel", "import");
+  rippleLink.setAttribute("href", "polymer-components/paper-ripple/paper-ripple.html");
+  head.appendChild(rippleLink);
+  var tabsLink = document.createElement("link");
+  tabsLink.setAttribute("rel", "import");
+  tabsLink.setAttribute("href", "polymer-components/paper-tabs/paper-tabs.html");
+  head.appendChild(tabsLink);
+}
+function h$mkOverlay() {
+  var overlay = document.createElement("core-overlay");
+  overlay.setAttribute("id", "ghcjs-prof-overlay");
+  var h2 = document.createElement("h2");
+  h2.appendChild(document.createTextNode("Retained object counts per CSS"));
+  overlay.appendChild(h2);
+  document.querySelector("body").appendChild(overlay);
+}
+function h$mkTabs() {
+  var tabs = document.createElement("paper-tabs");
+  tabs.setAttribute("selected", "0");
+  tabs.setAttribute("noink", "");
+  tabs.setAttribute("nobar", "");
+  var barsTab = document.createElement("paper-tab");
+  barsTab.appendChild(document.createTextNode("Bars"));
+  tabs.appendChild(barsTab);
+  var linesTab = document.createElement("paper-tab");
+  linesTab.appendChild(document.createTextNode("Lines"));
+  tabs.appendChild(linesTab);
+  var barsTabContent = document.createElement("div");
+  barsTabContent.setAttribute("id", "ghcjs-prof-bars");
+  var linesTabContent = document.createElement("div");
+  linesTabContent.setAttribute("id", "ghcjs-prof-lines");
+  var pages = document.createElement("core-pages");
+  pages.setAttribute("id", "ghcjs-prof-pages");
+  pages.setAttribute("selected", "0");
+  pages.appendChild(barsTabContent);
+  pages.appendChild(linesTabContent);
+  // add elements to the given parent
+  var overlay = document.getElementById("ghcjs-prof-overlay");
+  overlay.appendChild(tabs);
+  overlay.appendChild(pages);
+  // event handler
+  tabs.addEventListener("click", function (e) {
+    console.log("event handler called");
+    pages.selected = tabs.selected;
+  });
 }
 function h$includeChartjs(callback) {
   var chartjs = document.createElement("script");
@@ -8340,7 +8399,7 @@ function h$includeChartjs(callback) {
 function h$addCSS() {
   var style = document.createElement("style");
   var css =
-    "      #ghcjs-prof-container {        height: 600px;        overflow: scroll;      }      #ghcjs-prof-overlay {        box-sizing: border-box;        -moz-box-sizing: border-box;        font-family: Arial, Helvetica, sans-serif;        font-size: 13px;        -webkit-user-select: none;        -moz-user-select: none;        overflow: hidden;        background: white;        padding: 30px 42px;        outline: 1px solid rgba(0,0,0,0.2);        box-shadow: 0 4px 16px rgba(0,0,0,0.2);        width: 80%;      }    ";
+    "      #ghcjs-prof-bars, #ghcjs-prof-lines {        overflow: scroll;      }      #ghcjs-prof-pages {        height: 400px;      }      .ghcjs-prof-column-left { width: 20%; }      .ghcjs-prof-column-center { width: 5%; }      .ghcjs-prof-column-right { width: 70%; }      .ghcjs-prof-progress {        padding: 10px;        display: block;        width: 100%;      }      .ghcjs-prof-progress.pink::shadow #activeProgress {        background-color: #e91e63;      }      .ghcjs-prof-progress.pink::shadow #secondaryProgress {        background-color: #f8bbd0;      }      #ghcjs-prof-overlay {        box-sizing: border-box;        -moz-box-sizing: border-box;        font-family: Arial, Helvetica, sans-serif;        font-size: 13px;        -webkit-user-select: none;        -moz-user-select: none;        overflow: hidden;        background: white;        padding: 30px 42px;        outline: 1px solid rgba(0,0,0,0.2);        box-shadow: 0 4px 16px rgba(0,0,0,0.2);        width: 80%;        height: 600px;      }    ";
   if (style.styleSheet) {
     style.styleSheet.cssText = css;
   } else {
@@ -8349,20 +8408,15 @@ function h$addCSS() {
   document.getElementsByTagName("head")[0].appendChild(style);
 }
 function h$addOverlayDOM() {
-  var overlay = document.createElement("core-overlay");
-  overlay.setAttribute("id", "ghcjs-prof-overlay");
-  var h2 = document.createElement("h2");
-  h2.appendChild(document.createTextNode("Retained object counts per CSS"));
-  overlay.appendChild(h2);
+  var overlay = document.getElementById("ghcjs-prof-bars");
   var div = document.createElement("div");
   div.setAttribute("flex", "");
   div.setAttribute("id", "ghcjs-prof-container");
+  var ul = document.createElement("ul");
+  ul.setAttribute("flex", "");
+  ul.setAttribute("id", "ghcjs-prof-container-ul");
+  div.appendChild(ul);
   overlay.appendChild(div);
-  var button = document.createElement("button");
-  button.setAttribute("core-overlay-toggle", "");
-  button.appendChild(document.createTextNode("Close"));
-  overlay.appendChild(button);
-  document.getElementsByTagName("body")[0].appendChild(overlay);
 }
 // Return id of the div that shows info of given CCS
 function h$mkDivId(ccs) {
@@ -8371,6 +8425,82 @@ function h$mkDivId(ccs) {
 // String representation of a CCS
 function h$mkCCSLabel(ccs) {
   return ccs.cc.module + '.' + ccs.cc.label + ' (' + ccs.cc.srcloc + ')';
+}
+function h$mkCCSDOM(ccs) {
+  var ccsLabel = h$mkCCSLabel(ccs);
+  var rowDivId = h$mkDivId(ccs);
+  var leftDiv = document.createElement("div");
+  leftDiv.setAttribute("class", "ghcjs-prof-column-left");
+  leftDiv.appendChild(document.createTextNode(ccsLabel));
+  var midDiv = document.createElement("div");
+  midDiv.setAttribute("class", "ghcjs-prof-column-center");
+  midDiv.appendChild(document.createTextNode("0"));
+  var rightDiv = document.createElement("div");
+  rightDiv.setAttribute("class", "ghcjs-prof-column-right");
+  var bar = document.createElement("paper-progress");
+  bar.setAttribute("value", "0");
+  bar.setAttribute("min", "0");
+  bar.setAttribute("max", "1000");
+  bar.setAttribute("class", "ghcjs-prof-progress");
+  rightDiv.appendChild(bar);
+  ccs.domElems = {
+    leftDiv: leftDiv,
+    midDiv: midDiv,
+    rightDiv: rightDiv,
+    bar: bar
+  };
+  var rowDiv = document.createElement("div");
+  rowDiv.setAttribute("layout", "");
+  rowDiv.setAttribute("horizontal", "");
+  rowDiv.appendChild(leftDiv);
+  rowDiv.appendChild(midDiv);
+  rowDiv.appendChild(rightDiv);
+  var ul = document.createElement("ul");
+  var div = document.createElement("div");
+  div.setAttribute("layout", "");
+  div.setAttribute("vertical", "");
+  div.setAttribute("id", rowDivId);
+  div.appendChild(rowDiv);
+  div.appendChild(ul);
+  return div;
+}
+function h$mkSettingTabs(parent) {
+  // <paper-tabs id="ghcjs-prof-checkbox-tabs" selected="CCS" noink nobar>
+  //   <paper-tab name="CCS">CCS</paper-tab>
+  //   <paper-tab name="module">Module</paper-tab>
+  // </paper-tabs>
+  // <tab show="CCS" id="ghcjs-prof-ccs-tab"></tab>
+  // <tab show="module" id="ghcjs-prof-module-tab"></tab>
+  var tabs = document.createElement("paper-tabs");
+  tabs.setAttribute("id", "ghcjs-prof-checkbox-tabs");
+  tabs.setAttribute("selected", "0");
+  tabs.setAttribute("noink", "");
+  tabs.setAttribute("nobar", "");
+  var ccsTab = document.createElement("paper-tab");
+  ccsTab.appendChild(document.createTextNode("CCS"));
+  tabs.appendChild(ccsTab);
+  var moduleTab = document.createElement("paper-tab");
+  moduleTab.appendChild(document.createTextNode("Module"));
+  tabs.appendChild(moduleTab);
+  var ccsTabContent = document.createElement("div");
+  ccsTabContent.setAttribute("id", "ghcjs-prof-ccs-tab");
+  var moduleTabContent = document.createElement("div");
+  moduleTabContent.setAttribute("id", "ghcjs-prof-module-tab");
+  // for testing purposes
+  ccsTabContent.appendChild(document.createTextNode("ccs tab"));
+  moduleTabContent.appendChild(document.createTextNode("module tab"));
+  var pages = document.createElement("core-pages");
+  pages.setAttribute("selected", "0");
+  pages.appendChild(ccsTabContent);
+  pages.appendChild(moduleTabContent);
+  // add elements to the given parent
+  parent.appendChild(tabs);
+  parent.appendChild(pages);
+  // event handler
+  tabs.addEventListener("click", function (e) {
+    console.log("event handler called");
+    pages.selected = tabs.selected;
+  });
 }
 function h$mkCCSSettingDOM(ccs) {
   // <li>
@@ -8400,6 +8530,79 @@ function h$mkCCSSettingDOM(ccs) {
   }
   return settingLi;
 }
+function h$addCCSDOM() {
+  var ul = document.getElementById("ghcjs-prof-container-ul");
+  for (var i = 0; i < h$ccsList.length; i++)
+    ul.appendChild(h$mkCCSDOM(h$ccsList[i]));
+}
+function h$updateDOMs() {
+  for (var i = 0; i < h$ccsList.length; i++) {
+    var ccs = h$ccsList[i];
+    if (ccs.prevStack === null || ccs.prevStack === undefined) {
+      h$inheritRetained(ccs);
+      ccs.domElems.midDiv.innerHTML = ccs.inheritedRetain;
+      ccs.domElems.bar.setAttribute("value", ccs.inheritedRetain);
+    }
+  }
+  var stack = [];
+  for (var ccsIdx = 0; ccsIdx < h$ccsList.length; ccsIdx++) {
+    var ccs = h$ccsList[ccsIdx];
+    if (ccs.prevStack === null || ccs.prevStack === undefined) {
+      // push initial values to the stack
+      for (var j = 0; j < ccs.consed.values().length; j++)
+        stack.push(ccs.consed.values()[j]);
+      var val = stack.pop();
+      while (val !== undefined) {
+        // push children stack frames to the stack
+        for (var j = 0; j < val.consed.values().length; j++)
+          stack.push(val.consed.values()[j]);
+        var divId = h$mkDivId(val);
+        var div = document.getElementById(divId);
+        if (div === null) {
+          var div = h$mkCCSDOM(val);
+          var parentDivId = h$mkDivId(val.prevStack);
+          var parentDiv = document.getElementById(parentDivId);
+          var ul = parentDiv.children[parentDiv.children.length - 1];
+          ul.appendChild(h$mkCCSDOM(val));
+        } else {
+          val.domElems.midDiv.innerHTML = val.inheritedRetain;
+          val.domElems.bar.setAttribute("value", val.inheritedRetain);
+        }
+        // reload current value
+        val = stack.pop();
+      }
+    }
+  }
+  var maxRetained = h$sortDOMs(document.getElementById("ghcjs-prof-container-ul"));
+  // scale the bars
+  for (var ccsIdx = 0; ccsIdx < h$ccsList.length; ccsIdx++) {
+    var ccs = h$ccsList[ccsIdx];
+    ccs.domElems.rightDiv.children[0].setAttribute("max", maxRetained);
+  }
+}
+function h$sortDOMs(parent) {
+  // maximum number of retained objs, to be used in scaling the bars
+  var maxRetained = 0;
+  var items = [];
+  var children = parent.children;
+  while (parent.firstChild)
+      items.push(parent.removeChild(parent.firstChild));
+  // sort child nodes first
+  for (var i = 0; i < items.length; i++)
+    h$sortDOMs(items[i].children[1]);
+  items.sort(function (a, b) {
+    var midDivA = a.children[0].children[1];
+    var midDivB = b.children[0].children[1];
+    return (parseInt(midDivB.innerHTML) - parseInt(midDivA.innerHTML));
+  });
+  for (var i = 0; i < items.length; i++) {
+    var retained = parseInt(items[i].children[0].children[1].innerHTML);
+    if (retained > maxRetained)
+      maxRetained = retained;
+    parent.appendChild(items[i]);
+  }
+  return maxRetained;
+}
 function h$toggleProfGUI() {
   document.getElementById("ghcjs-prof-overlay").toggle();
 }
@@ -8413,29 +8616,63 @@ function h$getRandomColor() {
 }
 var h$chart;
 function h$createChart() {
+  // wrapping div
   var chartDiv = document.createElement("div");
   chartDiv.setAttribute("horizontal", "");
   chartDiv.setAttribute("layout", "");
-  // wrap the canvas with a layer of "div"
+  // wrap the canvas with a layer of "div" for layout
   var chartDiv1 = document.createElement("div");
+  chartDiv1.setAttribute("flex", "");
+  chartDiv1.setAttribute("two", "");
   var chartCanvas = document.createElement("canvas");
-  chartCanvas.setAttribute("width", 800);
-  chartCanvas.setAttribute("height", 500);
   chartCanvas.setAttribute("id", "ghcjs-prof-chart");
+  // just to set aspect ratio
+  chartCanvas.setAttribute("width", 1);
+  chartCanvas.setAttribute("height", 1);
   chartDiv1.appendChild(chartCanvas);
   chartDiv.appendChild(chartDiv1);
+  // div for settings
   var settingsDiv = document.createElement("div");
-  var settingsUl = document.createElement("ul");
-  settingsUl.setAttribute("id", "ghcjs-prof-settings-ul");
+  settingsDiv.setAttribute("flex", "");
+  // put filter by CCS/module tabs
+  var tabs = document.createElement("paper-tabs");
+  tabs.setAttribute("selected", "0");
+  tabs.setAttribute("noink", "");
+  tabs.setAttribute("nobar", "");
+  var filterCCSTab = document.createElement("paper-tab");
+  filterCCSTab.appendChild(document.createTextNode("Filter by CCS"));
+  tabs.appendChild(filterCCSTab);
+  var filterModuleTab = document.createElement("paper-tab");
+  filterModuleTab.appendChild(document.createTextNode("Filter by module"));
+  tabs.appendChild(filterModuleTab);
+  settingsDiv.appendChild(tabs);
+  // set up pages for tabs
+  var pages = document.createElement("core-pages");
+  pages.setAttribute("id", "ghcjs-prof-settings-pages");
+  pages.setAttribute("selected", "0");
+  tabs.addEventListener("click", function (e) {
+    console.log("event handler called");
+    pages.selected = tabs.selected;
+  });
+  // filter by CCS tab contents
+  var ccsDiv = document.createElement("div");
+  var ccsUl = document.createElement("ul");
+  ccsUl.setAttribute("id", "ghcjs-prof-settings-ul");
   // add initial CCS settings
   for (var ccsIdx = 0; ccsIdx < h$ccsList.length; ccsIdx++) {
     var ccs = h$ccsList[ccsIdx];
     if (ccs.prevStack === null || ccs.prevStack === undefined)
-      settingsUl.appendChild(h$mkCCSSettingDOM(ccs));
+      ccsUl.appendChild(h$mkCCSSettingDOM(ccs));
   }
-  settingsDiv.appendChild(settingsUl);
+  ccsDiv.appendChild(ccsUl);
+  pages.appendChild(ccsDiv);
+  //pages.appendChild(ccsUl);
+  // filter by module tab contents
+  var moduleUl = document.createElement("ul");
+  pages.appendChild(moduleUl);
+  settingsDiv.appendChild(pages);
   chartDiv.appendChild(settingsDiv);
-  document.getElementById("ghcjs-prof-container").appendChild(chartDiv);
+  document.getElementById("ghcjs-prof-lines").appendChild(chartDiv);
   var ctx = chartCanvas.getContext("2d");
   var initialData = {
     labels: [],
@@ -8456,6 +8693,10 @@ function h$createChart() {
     pointDot : false,
     // Number - amount extra to add to the radius to cater for hit detection outside the drawn point
     pointHitDetectionRadius : 20,
+    // Boolean - whether or not the chart should be responsive and resize when the browser does.
+    responsive : true,
+    // Boolean - whether to maintain the starting aspect ratio or not when responsive, if set to false, will take up entire container
+    maintainAspectRatio: true,
     // Boolean - Whether to show a stroke for datasets
     datasetStroke : false,
     // Number - Pixel width of dataset stroke
@@ -8501,12 +8742,10 @@ function h$updateChart() {
   var toplevelCCS = 0;
   // new data to push to the chart
   var newData = [];
-  // add data for top-level CCSs, count top-level CCSs and calculate
-  // inherited retained obj counts
+  // add data for top-level CCSs and count top-level CCSs
   for (var ccsIdx = 0; ccsIdx < h$ccsList.length; ccsIdx++) {
     var ccs = h$ccsList[ccsIdx];
     if (ccs.prevStack === null || ccs.prevStack === undefined) {
-      h$inheritRetained(ccs);
       ++toplevelCCS; // TODO: no need to count this in every cycle
       // assume inherited retained counts are calculated
       ccs.plotData.push(ccs.inheritedRetain);
@@ -8605,9 +8844,13 @@ function h$showOrHideCCS(ccs) {
 }
 document.addEventListener("DOMContentLoaded", function () {
   h$includePolymer();
+  h$mkOverlay();
+  h$mkTabs();
   h$includeChartjs(h$createChart);
   h$addCSS();
   h$addOverlayDOM();
+  h$addCCSDOM();
+  h$mkSettingTabs(document.getElementById("ghcjs-prof-container"));
 });
 // Copyright 2011 The Closure Library Authors. All Rights Reserved.
 //
