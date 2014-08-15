@@ -8464,44 +8464,6 @@ function h$mkCCSDOM(ccs) {
   div.appendChild(ul);
   return div;
 }
-function h$mkSettingTabs(parent) {
-  // <paper-tabs id="ghcjs-prof-checkbox-tabs" selected="CCS" noink nobar>
-  //   <paper-tab name="CCS">CCS</paper-tab>
-  //   <paper-tab name="module">Module</paper-tab>
-  // </paper-tabs>
-  // <tab show="CCS" id="ghcjs-prof-ccs-tab"></tab>
-  // <tab show="module" id="ghcjs-prof-module-tab"></tab>
-  var tabs = document.createElement("paper-tabs");
-  tabs.setAttribute("id", "ghcjs-prof-checkbox-tabs");
-  tabs.setAttribute("selected", "0");
-  tabs.setAttribute("noink", "");
-  tabs.setAttribute("nobar", "");
-  var ccsTab = document.createElement("paper-tab");
-  ccsTab.appendChild(document.createTextNode("CCS"));
-  tabs.appendChild(ccsTab);
-  var moduleTab = document.createElement("paper-tab");
-  moduleTab.appendChild(document.createTextNode("Module"));
-  tabs.appendChild(moduleTab);
-  var ccsTabContent = document.createElement("div");
-  ccsTabContent.setAttribute("id", "ghcjs-prof-ccs-tab");
-  var moduleTabContent = document.createElement("div");
-  moduleTabContent.setAttribute("id", "ghcjs-prof-module-tab");
-  // for testing purposes
-  ccsTabContent.appendChild(document.createTextNode("ccs tab"));
-  moduleTabContent.appendChild(document.createTextNode("module tab"));
-  var pages = document.createElement("core-pages");
-  pages.setAttribute("selected", "0");
-  pages.appendChild(ccsTabContent);
-  pages.appendChild(moduleTabContent);
-  // add elements to the given parent
-  parent.appendChild(tabs);
-  parent.appendChild(pages);
-  // event handler
-  tabs.addEventListener("click", function (e) {
-    console.log("event handler called");
-    pages.selected = tabs.selected;
-  });
-}
 function h$mkCCSSettingDOM(ccs) {
   // <li>
   //   <div>
@@ -8527,7 +8489,39 @@ function h$mkCCSSettingDOM(ccs) {
     ccs.hidden = !this.checked;
     h$showOrHideCCS(ccs);
     h$chart.update();
-  }
+  };
+  return settingLi;
+}
+function h$mkCCSModuleSettingDOM(module) {
+  var settingCheckbox = document.createElement("input");
+  settingCheckbox.setAttribute("type", "checkbox");
+  settingCheckbox.setAttribute("id", module + "-enabled");
+  settingCheckbox.setAttribute("checked", "");
+  var settingCheckboxLabel = document.createElement("label");
+  settingCheckboxLabel.appendChild(settingCheckbox);
+  settingCheckboxLabel.appendChild(document.createTextNode(module));
+  var settingLi = document.createElement("li");
+  settingLi.appendChild(settingCheckboxLabel);
+  settingCheckbox.onchange = function () {
+    console.log("checkbox changed");
+    if (this.checked) {
+      for (var ccsIdx = 0; ccsIdx < h$ccsList.length; ccsIdx++) {
+        var ccs = h$ccsList[ccsIdx];
+        if (ccs.cc.module === module) {
+          console.log("checking a checkbox");
+          document.getElementById(h$mkDivId(ccs) + "-enabled").checked = true;
+        }
+      }
+    } else {
+      for (var ccsIdx = 0; ccsIdx < h$ccsList.length; ccsIdx++) {
+        var ccs = h$ccsList[ccsIdx];
+        if (ccs.cc.module === module) {
+          console.log("unchecking a checkbox");
+          document.getElementById(h$mkDivId(ccs) + "-enabled").checked = false;
+        }
+      }
+    }
+  };
   return settingLi;
 }
 function h$addCCSDOM() {
@@ -8655,7 +8649,6 @@ function h$createChart() {
     pages.selected = tabs.selected;
   });
   // filter by CCS tab contents
-  var ccsDiv = document.createElement("div");
   var ccsUl = document.createElement("ul");
   ccsUl.setAttribute("id", "ghcjs-prof-settings-ul");
   // add initial CCS settings
@@ -8664,11 +8657,18 @@ function h$createChart() {
     if (ccs.prevStack === null || ccs.prevStack === undefined)
       ccsUl.appendChild(h$mkCCSSettingDOM(ccs));
   }
-  ccsDiv.appendChild(ccsUl);
-  pages.appendChild(ccsDiv);
-  //pages.appendChild(ccsUl);
+  pages.appendChild(ccsUl);
   // filter by module tab contents
   var moduleUl = document.createElement("ul");
+  moduleUl.setAttribute("id", "ghcjs-prof-module-settings-ul");
+  // add module settings
+  var modules = {};
+  for (var ccsIdx = 0; ccsIdx < h$ccsList.length; ccsIdx++) {
+    var ccs = h$ccsList[ccsIdx];
+    modules[ccs.cc.module] = true;
+  }
+  for (module in modules)
+    moduleUl.appendChild(h$mkCCSModuleSettingDOM(module));
   pages.appendChild(moduleUl);
   settingsDiv.appendChild(pages);
   chartDiv.appendChild(settingsDiv);
@@ -8850,7 +8850,6 @@ document.addEventListener("DOMContentLoaded", function () {
   h$addCSS();
   h$addOverlayDOM();
   h$addCCSDOM();
-  h$mkSettingTabs(document.getElementById("ghcjs-prof-container"));
 });
 // Copyright 2011 The Closure Library Authors. All Rights Reserved.
 //
